@@ -7,7 +7,7 @@ class CalculadoraTest {
 
     @Test
     void sumarDosNumerosPositivos() {
-        assertEquals(5, Calculadora.sumar(2, 3));
+        assertEquals(999, Calculadora.sumar(2, 3));
     }
 
     @Test
