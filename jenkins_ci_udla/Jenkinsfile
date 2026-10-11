@@ -14,7 +14,7 @@ pipeline {
 
     environment {
         // REEMPLAZAR con la URL HTTPS real del repositorio privado.
-        GIT_URL = 'https://github.com/TU_USUARIO/jenkins-ci-udla.git'
+        GIT_URL = 'https://github.com/ElPaul593/Automatizacion_JENKINS'
     }
 
     stages {
