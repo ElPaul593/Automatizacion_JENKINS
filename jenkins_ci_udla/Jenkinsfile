@@ -2,41 +2,53 @@ pipeline {
     agent any
 
     options {
-        // La obtención del repositorio se hace explícitamente en la etapa 1.
+        // Descarga explicita en la primera etapa para hacer visible la integracion.
         skipDefaultCheckout(true)
         timestamps()
     }
 
     tools {
-        // Configurar este nombre en Administrar Jenkins > Herramientas.
+        // Crear en Jenkins > Administrar Jenkins > Herramientas > Maven.
         maven 'Maven3'
     }
 
     environment {
-        // CAMBIAR por la URL HTTPS de tu repositorio PRIVADO.
+        // REEMPLAZAR con la URL HTTPS real del repositorio privado.
         GIT_URL = 'https://github.com/TU_USUARIO/jenkins-ci-udla.git'
     }
 
     stages {
-        stage('Integracion al repositorio privado') {
+        stage('1 - Integracion repositorio privado') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
                     git branch: 'main',
                         credentialsId: 'github-private',
                         url: env.GIT_URL
-                    sh 'git rev-parse --short HEAD'
+
+                    script {
+                        if (isUnix()) {
+                            sh 'git rev-parse --short HEAD'
+                        } else {
+                            bat 'git rev-parse --short HEAD'
+                        }
+                    }
                 }
             }
         }
 
-        stage('Compilacion y pruebas automatizadas') {
+        stage('2 - Compilacion y tests') {
             when {
                 expression { currentBuild.currentResult == 'SUCCESS' }
             }
             steps {
-                // El pipeline no se detiene: debe llegar a la notificación incluso si fallan los tests.
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
-                    sh 'mvn -B -ntp clean verify'
+                    script {
+                        if (isUnix()) {
+                            sh 'mvn -B -ntp clean verify'
+                        } else {
+                            bat 'mvn -B -ntp clean verify'
+                        }
+                    }
                 }
             }
             post {
@@ -47,24 +59,34 @@ pipeline {
             }
         }
 
-        stage('Notificacion de ejecucion') {
+        stage('3 - Notificacion Telegram') {
             steps {
                 script {
                     def estado = currentBuild.currentResult == 'SUCCESS' ? 'EXITOSA' : 'FALLIDA'
-                    def mensaje = "CI Jenkins UDLA | ${estado}\nProyecto: ${env.JOB_NAME}\nEjecucion: #${env.BUILD_NUMBER}\nDetalle: ${env.BUILD_URL}"
+                    def mensaje = "Jenkins UDLA: ${estado} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
 
                     withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
                         withCredentials([
                             string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
                             string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
                         ]) {
-                            sh '''#!/bin/sh
+                            if (isUnix()) {
+                                sh '''#!/bin/sh
 set +x
 curl --fail --silent --show-error --retry 2 \
   --request POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
   --data-urlencode "chat_id=${CHAT_ID}" \
-  --data-urlencode "text=${TELEGRAM_MESSAGE}"
+  --data-urlencode "text=${TELEGRAM_MESSAGE}" > /dev/null
 '''
+                            } else {
+                                powershell '''
+$ErrorActionPreference = 'Stop'
+$uri = 'https://api.telegram.org/bot' + $env:BOT_TOKEN + '/sendMessage'
+$body = @{ chat_id = $env:CHAT_ID; text = $env:TELEGRAM_MESSAGE }
+Invoke-RestMethod -Method Post -Uri $uri -Body $body -ErrorAction Stop | Out-Null
+Write-Host 'Notificacion enviada a Telegram.'
+'''
+                            }
                         }
                     }
                 }
