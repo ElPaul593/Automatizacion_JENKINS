@@ -2,59 +2,40 @@ pipeline {
     agent any
 
     options {
-        // Descarga explicita en la primera etapa para hacer visible la integracion.
         skipDefaultCheckout(true)
         timestamps()
     }
 
     tools {
-        // Crear en Jenkins > Administrar Jenkins > Herramientas > Maven.
         maven 'Maven3'
     }
 
     environment {
-        // REEMPLAZAR con la URL HTTPS real del repositorio privado.
-        GIT_URL = 'https://github.com/ElPaul593/Automatizacion_JENKINS'
+        GIT_URL = 'https://github.com/ElPaul593/Automatizacion_JENKINS.git'
     }
 
     stages {
         stage('1 - Integracion repositorio privado') {
             steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     git branch: 'main',
                         credentialsId: 'github-private',
                         url: env.GIT_URL
 
-                    script {
-                        if (isUnix()) {
-                            sh 'git rev-parse --short HEAD'
-                        } else {
-                            bat 'git rev-parse --short HEAD'
-                        }
-                    }
+                    bat 'git rev-parse --short HEAD'
                 }
             }
         }
 
         stage('2 - Compilacion y tests') {
             when {
-                expression { currentBuild.currentResult == 'SUCCESS' }
-            }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
-                    script {
-                        if (isUnix()) {
-                            sh 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify -ntp clean verify'
-                        } else {
-                            bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify -ntp clean verify'
-                        }
-                    }
+                expression {
+                    currentBuild.currentResult == 'SUCCESS'
                 }
             }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'jenkins_ci_udla/target/surefire-reports/.xml'
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'jenkins_ci_udla/target/.jar'
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify'
                 }
             }
         }
@@ -70,23 +51,16 @@ pipeline {
                             string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
                             string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
                         ]) {
-                            if (isUnix()) {
-                                sh '''#!/bin/sh
-set +x
-curl --fail --silent --show-error --retry 2 \
-  --request POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-  --data-urlencode "chat_id=${CHAT_ID}" \
-  --data-urlencode "text=${TELEGRAM_MESSAGE}" > /dev/null
-'''
-                            } else {
-                                powershell '''
+                            powershell '''
 $ErrorActionPreference = 'Stop'
 $uri = 'https://api.telegram.org/bot' + $env:BOT_TOKEN + '/sendMessage'
-$body = @{ chat_id = $env:CHAT_ID; text = $env:TELEGRAM_MESSAGE }
+$body = @{
+    chat_id = $env:CHAT_ID
+    text = $env:TELEGRAM_MESSAGE
+}
 Invoke-RestMethod -Method Post -Uri $uri -Body $body -ErrorAction Stop | Out-Null
 Write-Host 'Notificacion enviada a Telegram.'
 '''
-                            }
                         }
                     }
                 }
