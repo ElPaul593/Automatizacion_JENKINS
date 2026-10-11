@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+
+    options {
+        // La obtención del repositorio se hace explícitamente en la etapa 1.
+        skipDefaultCheckout(true)
+        timestamps()
+    }
+
+    tools {
+        // Configurar este nombre en Administrar Jenkins > Herramientas.
+        maven 'Maven3'
+    }
+
+    environment {
+        // CAMBIAR por la URL HTTPS de tu repositorio PRIVADO.
+        GIT_URL = 'https://github.com/TU_USUARIO/jenkins-ci-udla.git'
+    }
+
+    stages {
+        stage('Integracion al repositorio privado') {
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
+                    git branch: 'main',
+                        credentialsId: 'github-private',
+                        url: env.GIT_URL
+                    sh 'git rev-parse --short HEAD'
+                }
+            }
+        }
+
+        stage('Compilacion y pruebas automatizadas') {
+            when {
+                expression { currentBuild.currentResult == 'SUCCESS' }
+            }
+            steps {
+                // El pipeline no se detiene: debe llegar a la notificación incluso si fallan los tests.
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
+                    sh 'mvn -B -ntp clean verify'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+                    archiveArtifacts allowEmptyArchive: true, artifacts: 'target/*.jar'
+                }
+            }
+        }
+
+        stage('Notificacion de ejecucion') {
+            steps {
+                script {
+                    def estado = currentBuild.currentResult == 'SUCCESS' ? 'EXITOSA' : 'FALLIDA'
+                    def mensaje = "CI Jenkins UDLA | ${estado}\nProyecto: ${env.JOB_NAME}\nEjecucion: #${env.BUILD_NUMBER}\nDetalle: ${env.BUILD_URL}"
+
+                    withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
+                        withCredentials([
+                            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
+                            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
+                        ]) {
+                            sh '''#!/bin/sh
+set +x
+curl --fail --silent --show-error --retry 2 \
+  --request POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+  --data-urlencode "chat_id=${CHAT_ID}" \
+  --data-urlencode "text=${TELEGRAM_MESSAGE}"
+'''
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
