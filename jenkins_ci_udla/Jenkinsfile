@@ -44,17 +44,17 @@ pipeline {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE', catchInterruptions: false) {
                     script {
                         if (isUnix()) {
-                            sh 'mvn -B -ntp clean verify'
+                            sh 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify -ntp clean verify'
                         } else {
-                            bat 'mvn -B -ntp clean verify'
+                            bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify -ntp clean verify'
                         }
                     }
                 }
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'target/*.jar'
+                    junit allowEmptyResults: true, testResults: 'jenkins_ci_udla/target/surefire-reports/.xml'
+                    archiveArtifacts allowEmptyArchive: true, artifacts: 'jenkins_ci_udla/target/.jar'
                 }
             }
         }
