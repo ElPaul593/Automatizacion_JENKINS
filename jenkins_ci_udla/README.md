@@ -1,145 +1,93 @@
-# Automatización de tareas en pipeline CI — Jenkins
+# HelpDesk UDLA: Gestión de incidencias con Jenkins CI
 
-## Alcance de la tarea
-Demostración individual de un pipeline con **exactamente tres etapas**:
+**Proyecto funcional, no una calculadora.** Aplicación web para registrar, consultar, filtrar, actualizar, eliminar y dar seguimiento a incidencias de soporte técnico. Guarda los datos localmente y muestra estadísticas por estado.
 
-1. Integración con un repositorio **privado** de GitHub.
-2. Compilación de un proyecto Java con Maven y ejecución de cuatro pruebas JUnit.
-3. Notificación automática del estado (éxito o fallo) mediante Telegram.
+## Tecnologías
+- Java 17, servidor HTTP incluido en el JDK, interfaz HTML/CSS/JavaScript.
+- Maven para compilar y generar un archivo JAR ejecutable.
+- JUnit 5 para **13 pruebas automatizadas** (11 unitarias y 2 de integración HTTP).
+- Jenkins con **tres etapas**: checkout privado, compilación/pruebas, notificación por Telegram.
+- Sin dependencias de ejecución externas (facilita instalarlo y verificarlo).
 
-## Estructura
+## Funcionalidades
+1. Crear incidencias con título, descripción y prioridad: baja, media, alta, crítica.
+2. Listar todas o filtrar por abiertas, en progreso o resueltas.
+3. Cambiar el estado de una incidencia y eliminarla.
+4. Mostrar métricas de incidencias por estado.
+5. Conservar información en `data/incidencias.properties` cuando reinicias la aplicación.
 
-```
-jenkins_ci_udla/
-├── Jenkinsfile
-├── pom.xml
-├── .gitignore
-├── src/main/java/edu/udla/Calculadora.java
-└── src/test/java/edu/udla/CalculadoraTest.java
-```
+## Cómo ejecutarlo
+Requisitos: JDK 17+ y Maven 3.8+.
 
-## Requisitos previos
-- Jenkins funcionando, accesible desde el navegador y con un **agente Linux o Unix** disponible.
-- Git, JDK 17 o superior compatible con `--release 17`, `curl` y acceso a GitHub/Telegram desde el agente.
-- Plugins de Jenkins: Pipeline, Git, Credentials, Credentials Binding, JUnit (y sus dependencias).
-- Maven configurado en **Administrar Jenkins > Herramientas**, con nombre **Maven3** (habilita instalación automática si aplica).
-- Repositorio PRIVADO en GitHub y token de acceso personal de alcance restringido con acceso de lectura a los contenidos de ese repositorio.
-- Bot de Telegram y chat ID.
-
-## 1. Crear repositorio privado
-1. GitHub > New repository > nombre `jenkins-ci-udla` > visibilidad `Private` > Create repository.
-2. Abre una terminal **dentro de la carpeta `jenkins_ci_udla`**:
-
-```bash
-git init
-git branch -M main
-git add .
-git commit -m "feat: pipeline CI Jenkins con Maven y Telegram"
-git remote add origin https://github.com/TU_USUARIO/jenkins-ci-udla.git
-git push -u origin main
+```sh
+cd jenkins_ci_udla
+mvn clean verify
+java -jar target/gestion-incidencias-1.0.0.jar
 ```
 
-3. Edita el valor `GIT_URL` del `Jenkinsfile` con la URL REAL de tu repositorio, guarda el archivo, haz `git add Jenkinsfile && git commit -m "chore: configurar repo CI" && git push`.
-4. Verifica en GitHub que el repositorio sigue indicando **Private**.
+En el navegador abre **http://localhost:8080**. Para cambiar el puerto define la variable de entorno `HELPDESK_PORT`; para cambiar dónde guardar los datos define `HELPDESK_DATA`.
 
-No subas tokens, contraseñas, ni chat ID dentro de los archivos del repositorio.
+## API usada por el navegador
 
-## 2. Crear el token de GitHub
-- En GitHub, abre Settings > Developer settings > Personal access tokens > Fine-grained tokens.
-- Autoriza SOLO tu repositorio privado `jenkins-ci-udla`.
-- En Repository permissions asigna a `Contents` el permiso **Read-only**.
-- Guarda el token en un lugar seguro. No lo pegues en el código ni en el informe.
-- En Jenkins: Administrar Jenkins > Credenciales > Global > Añadir credenciales.
-  - Kind: `Username with password`.
-  - Username: tu usuario de GitHub.
-  - Password: tu personal access token.
-  - ID: `github-private`.
+| Método | Ruta | Operación |
+|---|---|---|
+| GET | `/` | Interfaz web |
+| GET | `/api/incidencias` | Listar incidencias |
+| GET | `/api/incidencias?estado=ABIERTO` | Filtrar |
+| POST | `/api/incidencias` | Crear (form-urlencoded: `titulo`, `descripcion`, `prioridad`) |
+| POST | `/api/incidencias/{id}/estado` | Cambiar estado (form-urlencoded: `estado`) |
+| DELETE | `/api/incidencias/{id}` | Eliminar |
+| GET | `/api/estadisticas` | Métricas |
 
-## 3. Configurar Telegram
-1. En Telegram abre el usuario verificado `@BotFather`, envía `/newbot` y sigue los pasos.
-2. Abre el chat del nuevo bot y envíale `/start` o `hola`.
-3. En tu TERMINAL, ejecuta el siguiente comando sin compartir el token:
+Es un prototipo académico local: el servidor solo escucha en `127.0.0.1` y no implementa autenticación. No usar directamente en producción ni abrirlo a Internet.
 
-```bash
-read -rsp 'Token de Telegram: ' TOKEN; echo
-curl -fsS "https://api.telegram.org/bot${TOKEN}/getUpdates"
-unset TOKEN
+## Configuración de Jenkins: PRIMERA TAREA
+
+### Paso 1 — Subir los archivos al repositorio existente
+El repositorio GitHub ya existente es:
+`https://github.com/ElPaul593/Automatizacion_JENKINS`
+
+La carpeta de este ZIP llamada **`jenkins_ci_udla`** debe sustituir la carpeta del mismo nombre en la **raíz** del repositorio GitHub. Elimina los archivos `Calculadora.java` y `CalculadoraTest.java` anteriores (para que no quede la calculadora).
+
+No cambies el nombre de la carpeta, porque el Jenkinsfile utiliza `jenkins_ci_udla/pom.xml`.
+
+### Paso 2 — Mantener la integración privada
+El repo debe volver a modo **Private** al realizar la demostración de ese requisito. En Jenkins debe existir una credencial de tipo *Username with password* con ID `github-private`: el usuario GitHub y un token PAT con permiso de lectura del repositorio (Contents: Read-only). No subas el token a GitHub.
+
+### Paso 3 — Configurar Jenkins (Windows)
+Este Jenkinsfile conserva los comandos Windows (`bat` y `powershell`) del proyecto original. El agente de Jenkins debe usar Windows y disponer de Git, Java 17+, Maven (en Jenkins configurado con el nombre exacto `Maven3`) y PowerShell.
+
+En el job, si usas **Pipeline script from SCM**:
+- Repository URL: `https://github.com/ElPaul593/Automatizacion_JENKINS.git`
+- Credentials: `github-private`
+- Branch: `*/main`
+- **Script Path: `jenkins_ci_udla/Jenkinsfile`** (no `Jenkinsfile` a secas).
+
+Si en cambio tu job usa **Pipeline script** pegado directamente en la interfaz, actualiza el código ahí en lugar de depender del archivo del repositorio.
+
+### Paso 4 — Verificar la compilación y los tests
+Ejecuta `Build Now`. La etapa 2 usa:
+
+```bat
+mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify
 ```
 
-4. Identifica `message.chat.id` en el JSON: ese es tu `chat_id` personal. Si sale `result: []`, vuelve a escribirle al bot y repite.
-5. Jenkins > Administrar Jenkins > Credenciales > Global > Añadir credenciales:
-   - Tipo `Secret text`, ID `telegram-bot-token`, Secret: token del bot.
-   - Tipo `Secret text`, ID `telegram-chat-id`, Secret: tu chat ID.
-6. Nunca compartas esos valores en la captura ni los subas a GitHub.
+En caso de éxito, Jenkins publica las pruebas JUnit y archiva el JAR de `target`.
 
-## 4. Preparar Maven en Jenkins
-- En **Administrar Jenkins > Herramientas**, agrega una instalación Maven cuyo nombre sea exactamente `Maven3`.
-- Activa la instalación automática o indica la ruta válida a Maven en el agente.
-- Asegúrate de tener instalado un JDK 17 o superior y un ejecutor Linux/Unix.
-- Comprueba que `curl` está instalado en el agente.
+### Paso 5 — Configurar y verificar Telegram
+Los secretos se guardan en credenciales Jenkins de tipo *Secret text*, con IDs:
+- `telegram-bot-token`
+- `telegram-chat-id`
 
-## 5. Crear job de Pipeline
-1. Panel de Jenkins > **Nueva tarea**.
-2. Nombre: `CI-Jenkins-UDLA` > tipo **Pipeline**.
-3. Desplázate a **Pipeline** > Definition: **Pipeline script from SCM**.
-4. SCM: **Git**.
-5. Repository URL: `https://github.com/TU_USUARIO/jenkins-ci-udla.git` (URL real).
-6. Credentials: selecciona `github-private`.
-7. Branch Specifier: `*/main`.
-8. Script Path: `Jenkinsfile`.
-9. Guardar > **Build Now**.
+En la etapa 3 se envía un mensaje `EXITOSA` o `FALLIDA`. Para demostrar el caso de fallo, modifica temporalmente la expectativa de una prueba JUnit, haz commit y push, y ejecuta el pipeline; después revierte el cambio y vuelve a ejecutar. **No dejes las pruebas rotas como versión final.**
 
-### Activación automática (mejora opcional)
-En la configuración del job, sección **Build Triggers**, activa **Poll SCM** y usa `H/5 * * * *` para que Jenkins compruebe aproximadamente cada cinco minutos si hubo cambios en Git. Esto resulta práctico si Jenkins está en `localhost`, donde un webhook de GitHub normalmente no puede alcanzarlo directamente. No es necesario para completar las tres etapas de la tarea.
+## Evidencias sugeridas
+- Repositorio privado con código del HelpDesk.
+- Aplicación en navegador creando y resolviendo incidencias.
+- Tres etapas del pipeline en Jenkins.
+- Log de `mvn clean verify` y reporte JUnit con 13 pruebas.
+- JAR generado y archivado.
+- Telegram notificando ejecución exitosa y fallida.
 
-**Nota**: Jenkins hace una lectura inicial del `Jenkinsfile` antes de entrar a las etapas. Luego, la etapa 1 hace el checkout explícito que se muestra en el pipeline.
-
-## 6. Ejecutar caso de éxito
-- Abre `Build Now` y entra a `Console Output`.
-- Debe mostrarse `BUILD SUCCESS` (si no hay problemas de configuración).
-- En la etapa 2 deben figurar 4 pruebas ejecutadas sin fallos.
-- Telegram debe recibir un mensaje con `EXITOSA`.
-- Captura la vista de las tres etapas, el resultado de JUnit y el mensaje de Telegram.
-
-## 7. Ejecutar caso de fallo deliberado (para demostrar la notificación)
-- Cambia temporalmente en `src/test/java/edu/udla/CalculadoraTest.java`:
-
-```java
-assertEquals(5, Calculadora.sumar(2, 3));
-```
-
-por:
-
-```java
-assertEquals(999, Calculadora.sumar(2, 3));
-```
-
-- Guarda, haz `git add . && git commit -m "test: provocar fallo controlado" && git push`.
-- Lanza otro build en Jenkins.
-- El estado esperado es `FAILURE`, mientras que la etapa 3 todavía debe ejecutarse y Telegram debe avisar `FALLIDA`.
-- Captura el fallo en JUnit y la notificación.
-- Restablece la prueba original, haz commit y push, y ejecuta nuevamente hasta terminar en verde.
-
-## 8. Evidencias recomendadas
-1. Página de GitHub con indicador **Private**, nombre y archivos del repositorio (sin credenciales).
-2. Configuración del Job **Pipeline script from SCM** con URL, branch y `Jenkinsfile`.
-3. Vista de las tres etapas del pipeline completado.
-4. Logs de compilación y pruebas (`Tests run: 4, Failures: 0`).
-5. Mensaje Telegram `EXITOSA`.
-6. Capturas del segundo build fallido (`FAILURE`) y mensaje Telegram `FALLIDA`.
-7. Opcional: gráfico/reportes JUnit y artefacto `.jar`.
-
-## Problemas habituales
-- `No such DSL method 'withCredentials'`: instalar/actualizar Credentials Binding Plugin.
-- `Tool type ... maven ... does not have an install of 'Maven3'`: configurar Maven con ese nombre en Jenkins.
-- `Authentication failed`: revisar token GitHub, alcance `Contents: Read-only`, usuario y credencial `github-private`.
-- `curl: not found`: instalar curl en el agente.
-- `403` o `400` al llamar a Telegram: revisar bot token, chat ID y que hayas enviado un mensaje inicial al bot.
-- `No tests found`: revisar que los archivos estén en las carpetas Java indicadas y que Maven descargue JUnit.
-
-## Referencias
-- https://www.jenkins.io/doc/pipeline/steps/workflow-basic-steps/
-- https://www.jenkins.io/doc/pipeline/steps/git/
-- https://www.jenkins.io/doc/book/pipeline/jenkinsfile/
-- https://www.jenkins.io/doc/pipeline/steps/junit/
-- https://core.telegram.org/bots/api
+## Pensado para la SEGUNDA tarea (sin implementarla aún)
+Se puede añadir posteriormente análisis estático, reglas por ramas, ejecución paralela, cache Maven y librerías compartidas. El proyecto base y las pruebas se conservarán.

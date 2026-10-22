@@ -21,21 +21,24 @@ pipeline {
                     git branch: 'main',
                         credentialsId: 'github-private',
                         url: env.GIT_URL
-
                     bat 'git rev-parse --short HEAD'
                 }
             }
         }
 
-        stage('2 - Compilacion y tests') {
+        stage('2 - Compilacion y tests automatizados') {
             when {
-                expression {
-                    currentBuild.currentResult == 'SUCCESS'
-                }
+                expression { currentBuild.currentResult == 'SUCCESS' }
             }
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'jenkins_ci_udla/target/surefire-reports/*.xml'
+                    archiveArtifacts allowEmptyArchive: true, artifacts: 'jenkins_ci_udla/target/*.jar'
                 }
             }
         }
@@ -45,7 +48,6 @@ pipeline {
                 script {
                     def estado = currentBuild.currentResult == 'SUCCESS' ? 'EXITOSA' : 'FALLIDA'
                     def mensaje = "Jenkins UDLA: ${estado} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
-
                     withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
                         withCredentials([
                             string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),

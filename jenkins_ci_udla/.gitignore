@@ -1,8 +1,6 @@
-# Salida de Maven
 /target/
-# Archivos del IDE
+/data/
+*.log
 .idea/
 .vscode/
 *.iml
-# Sistema operativo
-.DS_Store

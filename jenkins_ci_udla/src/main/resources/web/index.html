@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HelpDesk | Gestión de incidencias</title>
+  <style>
+    :root{font-family:Inter,Segoe UI,Arial,sans-serif;color:#182438;background:#f2f5f9}
+    *{box-sizing:border-box} body{margin:0} header{background:#0e2444;color:white;padding:28px max(24px,calc((100% - 1120px)/2))}
+    header h1{font-size:27px;margin:0 0 7px}header p{margin:0;color:#bdcee4;font-size:14px}
+    main{max-width:1120px;margin:27px auto;padding:0 20px}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    .metric,.panel{background:white;border:1px solid #e3e8f0;box-shadow:0 2px 8px #1a35600b;border-radius:11px}
+    .metric{padding:18px}.metric span{font-size:13px;color:#60718a}.metric strong{display:block;font-size:30px;margin-top:6px}
+    .layout{display:grid;grid-template-columns:340px 1fr;gap:18px;margin-top:18px}.panel{padding:22px}
+    h2{font-size:19px;margin:0 0 17px}label{display:block;font-weight:600;font-size:13px;margin:14px 0 7px}
+    input,textarea,select{font:inherit;width:100%;border:1px solid #cfdae7;border-radius:7px;padding:10px 11px;background:white;color:#182438}
+    textarea{min-height:105px;resize:vertical}button{font:inherit;cursor:pointer;border:0;border-radius:7px;padding:10px 15px}
+    .primary{background:#1769d0;color:white;font-weight:600;width:100%;margin-top:18px}
+    .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+    .toolbar h2{margin:0}.toolbar select{max-width:185px}.ticket{border:1px solid #e0e7f0;border-radius:9px;padding:16px;margin-top:11px}
+    .tickettop{display:flex;justify-content:space-between;gap:8px}.ticket h3{font-size:16px;margin:0}.meta{font-size:12px;color:#66768d;margin-top:8px}
+    .description{white-space:pre-wrap;color:#3b4a60;font-size:14px;margin:10px 0}.pill{display:inline-block;font-size:11px;border-radius:12px;padding:4px 9px;font-weight:700;background:#ebf1fb;color:#27558e}
+    .pill.ALTA,.pill.CRITICA{background:#fff0ee;color:#9b342a}.actions{display:flex;gap:10px;align-items:center;margin-top:12px}.actions select{flex:1}
+    .delete{color:#b32232;background:#fff0f0}.hint{font-size:13px;color:#6d7b90;margin-top:13px}.error{color:#a51d2d;font-size:13px;margin-top:10px;min-height:17px}
+    @media(max-width:800px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+  <header><h1>HelpDesk · Gestión de incidencias</h1><p>Registro, seguimiento y resolución de solicitudes de soporte técnico</p></header>
+  <main>
+    <section class="metrics">
+      <div class="metric"><span>Total</span><strong id="total">0</strong></div>
+      <div class="metric"><span>Abiertas</span><strong id="abiertas">0</strong></div>
+      <div class="metric"><span>En progreso</span><strong id="progreso">0</strong></div>
+      <div class="metric"><span>Resueltas</span><strong id="resueltas">0</strong></div>
+    </section>
+    <div class="layout">
+      <section class="panel">
+        <h2>Nueva incidencia</h2>
+        <form id="formulario">
+          <label for="titulo">Título</label><input id="titulo" maxlength="120" minlength="4" required placeholder="Ej. Equipo sin conexión a Internet">
+          <label for="descripcion">Descripción</label><textarea id="descripcion" maxlength="1000" placeholder="Describe el problema o la solicitud..."></textarea>
+          <label for="prioridad">Prioridad</label>
+          <select id="prioridad"><option value="BAJA">Baja</option><option value="MEDIA" selected>Media</option><option value="ALTA">Alta</option><option value="CRITICA">Crítica</option></select>
+          <button class="primary" type="submit">Registrar incidencia</button><div class="error" id="error"></div>
+        </form>
+        <p class="hint">Las incidencias se guardan en el equipo y continúan disponibles después de reiniciar el servidor.</p>
+      </section>
+      <section class="panel">
+        <div class="toolbar"><h2>Incidencias registradas</h2><select id="filtro" aria-label="Filtrar por estado"><option value="">Todos los estados</option><option value="ABIERTO">Abiertas</option><option value="EN_PROGRESO">En progreso</option><option value="RESUELTO">Resueltas</option></select></div>
+        <div id="lista"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const nombres = {ABIERTO:'Abierto', EN_PROGRESO:'En progreso', RESUELTO:'Resuelto'};
+    const prioridades = {BAJA:'Baja', MEDIA:'Media', ALTA:'Alta', CRITICA:'Crítica'};
+    async function solicitud(url, opciones) {
+      const respuesta = await fetch(url, opciones);
+      const datos = await respuesta.json();
+      if (!respuesta.ok) throw new Error(datos.error || 'No se pudo completar la operación');
+      return datos;
+    }
+    function elemento(nombre, clase, contenido) {
+      const nodo = document.createElement(nombre); if (clase) nodo.className = clase;
+      if (contenido !== undefined) nodo.textContent = contenido; return nodo;
+    }
+    async function refrescar() {
+      try {
+        const filtro = $('#filtro').value;
+        const [incidencias, estadisticas] = await Promise.all([
+          solicitud('/api/incidencias' + (filtro ? '?estado=' + filtro : '')),
+          solicitud('/api/estadisticas')
+        ]);
+        $('#total').textContent = estadisticas.total;
+        $('#abiertas').textContent = estadisticas.abiertas;
+        $('#progreso').textContent = estadisticas.enProgreso;
+        $('#resueltas').textContent = estadisticas.resueltas;
+        const lista = $('#lista'); lista.replaceChildren();
+        if (!incidencias.length) {lista.append(elemento('p','hint','No hay incidencias con este filtro.')); return;}
+        for (const i of incidencias) {
+          const tarjeta = elemento('article','ticket');
+          const top = elemento('div','tickettop');
+          top.append(elemento('h3','',i.titulo), elemento('span','pill ' + i.prioridad,prioridades[i.prioridad]));
+          tarjeta.append(top, elemento('div','meta',`#${i.id} · ${new Date(i.creadaEn).toLocaleString('es-EC')} · ${nombres[i.estado]}`));
+          if (i.descripcion) tarjeta.append(elemento('p','description',i.descripcion));
+          const acciones = elemento('div','actions'); const estado = elemento('select');
+          for (const [clave,nombre] of Object.entries(nombres)) {
+            const op = elemento('option','',nombre);op.value=clave;op.selected=clave===i.estado;estado.append(op);
+          }
+          estado.setAttribute('aria-label','Estado de incidencia '+i.id);
+          estado.addEventListener('change',async()=>{
+            try {await solicitud(`/api/incidencias/${i.id}/estado`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({estado:estado.value})});await refrescar();}
+            catch(e){alert(e.message);await refrescar();}
+          });
+          const borrar = elemento('button','delete','Eliminar');
+          borrar.addEventListener('click',async()=>{
+            if (!confirm('¿Eliminar la incidencia #'+i.id+'?')) return;
+            try{await solicitud(`/api/incidencias/${i.id}`,{method:'DELETE'});await refrescar();}catch(e){alert(e.message);}
+          });
+          acciones.append(estado,borrar);tarjeta.append(acciones);lista.append(tarjeta);
+        }
+      } catch(e) {$('#lista').replaceChildren(elemento('p','error',e.message));}
+    }
+    $('#formulario').addEventListener('submit',async e=>{
+      e.preventDefault();$('#error').textContent='';
+      try {
+        await solicitud('/api/incidencias',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+          body:new URLSearchParams({titulo:$('#titulo').value,descripcion:$('#descripcion').value,prioridad:$('#prioridad').value})});
+        e.target.reset();await refrescar();
+      }catch(error){$('#error').textContent=error.message;}
+    });
+    $('#filtro').addEventListener('change',refrescar);refrescar();
+  </script>
+</body>
+</html>

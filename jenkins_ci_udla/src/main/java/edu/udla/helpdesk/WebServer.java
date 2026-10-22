@@ -1,0 +1,174 @@
+package edu.udla.helpdesk;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+
+/** API HTTP y sitio web para registrar, listar, actualizar y eliminar incidencias. */
+public final class WebServer {
+    private final HttpServer server;
+    private final IncidenciaService service;
+    private final ExecutorService executor;
+
+    public WebServer(IncidenciaService service, int puerto) throws IOException {
+        this.service = service;
+        this.server = HttpServer.create(new InetSocketAddress("127.0.0.1", puerto), 0);
+        server.createContext("/", this::manejar);
+        executor = Executors.newCachedThreadPool();
+        server.setExecutor(executor);
+    }
+
+    public void iniciar() {
+        server.start();
+    }
+
+    public void detener() {
+        server.stop(0);
+        executor.shutdownNow();
+    }
+
+    public int puerto() {
+        return server.getAddress().getPort();
+    }
+
+    private void manejar(HttpExchange ex) throws IOException {
+        try {
+            String ruta = ex.getRequestURI().getPath();
+            String metodo = ex.getRequestMethod();
+            if (ruta.equals("/") && metodo.equals("GET")) {
+                try (InputStream entrada = WebServer.class.getResourceAsStream("/web/index.html")) {
+                    if (entrada == null) {
+                        enviar(ex, 500, "text/plain", "No se encontro la interfaz");
+                    } else {
+                        enviar(ex, 200, "text/html", new String(entrada.readAllBytes(), StandardCharsets.UTF_8));
+                    }
+                }
+            } else if (ruta.equals("/api/incidencias") && metodo.equals("GET")) {
+                Map<String, String> q = parametros(ex.getRequestURI().getRawQuery());
+                Estado estado = q.containsKey("estado") && !q.get("estado").isBlank()
+                        ? Estado.valueOf(q.get("estado")) : null;
+                List<String> objetos = new ArrayList<>();
+                for (Incidencia i : service.listar(estado)) {
+                    objetos.add(jsonIncidencia(i));
+                }
+                enviar(ex, 200, "application/json", "[" + String.join(",", objetos) + "]");
+            } else if (ruta.equals("/api/incidencias") && metodo.equals("POST")) {
+                Map<String, String> datos = cuerpoFormulario(ex);
+                Incidencia i = service.crear(datos.get("titulo"), datos.get("descripcion"),
+                        Prioridad.valueOf(datos.getOrDefault("prioridad", "MEDIA")));
+                enviar(ex, 201, "application/json", jsonIncidencia(i));
+            } else if (ruta.equals("/api/estadisticas") && metodo.equals("GET")) {
+                Map<Estado, Long> c = service.contarPorEstado();
+                String json = "{\"total\":" + service.total()
+                        + ",\"abiertas\":" + c.get(Estado.ABIERTO)
+                        + ",\"enProgreso\":" + c.get(Estado.EN_PROGRESO)
+                        + ",\"resueltas\":" + c.get(Estado.RESUELTO) + "}";
+                enviar(ex, 200, "application/json", json);
+            } else if (ruta.matches("/api/incidencias/[0-9]+") && metodo.equals("DELETE")) {
+                int id = Integer.parseInt(ruta.substring(ruta.lastIndexOf('/') + 1));
+                service.eliminar(id);
+                enviar(ex, 200, "application/json", "{\"eliminado\":true}");
+            } else if (ruta.matches("/api/incidencias/[0-9]+/estado") && metodo.equals("POST")) {
+                String[] partes = ruta.split("/");
+                int id = Integer.parseInt(partes[3]);
+                Estado nuevo = Estado.valueOf(parametros(leerCuerpo(ex)).get("estado"));
+                enviar(ex, 200, "application/json", jsonIncidencia(service.cambiarEstado(id, nuevo)));
+            } else if (ruta.startsWith("/api/")) {
+                enviar(ex, 404, "application/json", "{\"error\":\"Ruta no encontrada\"}");
+            } else {
+                enviar(ex, 404, "text/plain", "No encontrado");
+            }
+        } catch (IllegalArgumentException | NullPointerException e) {
+            enviar(ex, 400, "application/json", "{\"error\":" + jsonString(e.getMessage() == null
+                    ? "Datos invalidos" : e.getMessage()) + "}");
+        } catch (NoSuchElementException e) {
+            enviar(ex, 404, "application/json", "{\"error\":" + jsonString(e.getMessage()) + "}");
+        } catch (Exception e) {
+            System.err.println("Error de servidor: " + e.getMessage());
+            enviar(ex, 500, "application/json", "{\"error\":\"Error interno del servidor\"}");
+        } finally {
+            ex.close();
+        }
+    }
+
+    private static String leerCuerpo(HttpExchange ex) throws IOException {
+        byte[] bytes = ex.getRequestBody().readNBytes(65537);
+        if (bytes.length > 65536) {
+            throw new IllegalArgumentException("Solicitud demasiado grande");
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    private static Map<String, String> cuerpoFormulario(HttpExchange ex) throws IOException {
+        String tipo = ex.getRequestHeaders().getFirst("Content-Type");
+        if (tipo == null || !tipo.startsWith("application/x-www-form-urlencoded")) {
+            throw new IllegalArgumentException("Se espera un formulario URL encoded");
+        }
+        return parametros(leerCuerpo(ex));
+    }
+
+    private static Map<String, String> parametros(String query) {
+        Map<String, String> datos = new HashMap<>();
+        if (query == null || query.isBlank()) {
+            return datos;
+        }
+        for (String parte : query.split("&")) {
+            if (parte.isBlank()) continue;
+            String[] par = parte.split("=", 2);
+            datos.put(URLDecoder.decode(par[0], StandardCharsets.UTF_8),
+                    URLDecoder.decode(par.length > 1 ? par[1] : "", StandardCharsets.UTF_8));
+        }
+        return datos;
+    }
+
+    private static String jsonIncidencia(Incidencia i) {
+        return "{\"id\":" + i.id() + ",\"titulo\":" + jsonString(i.titulo())
+                + ",\"descripcion\":" + jsonString(i.descripcion())
+                + ",\"prioridad\":" + jsonString(i.prioridad().name())
+                + ",\"estado\":" + jsonString(i.estado().name())
+                + ",\"creadaEn\":" + jsonString(i.creadaEn().toString()) + "}";
+    }
+
+    private static String jsonString(String texto) {
+        if (texto == null) texto = "";
+        StringBuilder b = new StringBuilder("\"");
+        for (int k = 0; k < texto.length(); k++) {
+            char c = texto.charAt(k);
+            switch (c) {
+                case '"' -> b.append("\\\"");
+                case '\\' -> b.append("\\\\");
+                case '\n' -> b.append("\\n");
+                case '\r' -> b.append("\\r");
+                case '\t' -> b.append("\\t");
+                default -> {
+                    if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+                    else b.append(c);
+                }
+            }
+        }
+        return b.append('"').toString();
+    }
+
+    private static void enviar(HttpExchange ex, int codigo, String tipo, String contenido) throws IOException {
+        byte[] respuesta = contenido.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", tipo + "; charset=UTF-8");
+        ex.getResponseHeaders().set("Cache-Control", "no-store");
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        ex.sendResponseHeaders(codigo, respuesta.length);
+        try (OutputStream out = ex.getResponseBody()) {
+            out.write(respuesta);
+        }
+    }
+}
