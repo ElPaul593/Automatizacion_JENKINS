@@ -1,93 +1,407 @@
-# HelpDesk UDLA: Gestión de incidencias con Jenkins CI
 
-**Proyecto funcional, no una calculadora.** Aplicación web para registrar, consultar, filtrar, actualizar, eliminar y dar seguimiento a incidencias de soporte técnico. Guarda los datos localmente y muestra estadísticas por estado.
+# HelpDesk UDLA — Gestión de Incidencias con Jenkins CI
 
-## Tecnologías
-- Java 17, servidor HTTP incluido en el JDK, interfaz HTML/CSS/JavaScript.
-- Maven para compilar y generar un archivo JAR ejecutable.
-- JUnit 5 para **13 pruebas automatizadas** (11 unitarias y 2 de integración HTTP).
-- Jenkins con **tres etapas**: checkout privado, compilación/pruebas, notificación por Telegram.
-- Sin dependencias de ejecución externas (facilita instalarlo y verificarlo).
+Aplicación web desarrollada para **registrar, gestionar y dar seguimiento a incidencias de soporte técnico**, utilizando herramientas de integración continua como **Jenkins, Maven, JUnit 5 y GitHub**, junto con notificaciones automatizadas por Telegram.
 
-## Funcionalidades
-1. Crear incidencias con título, descripción y prioridad: baja, media, alta, crítica.
-2. Listar todas o filtrar por abiertas, en progreso o resueltas.
-3. Cambiar el estado de una incidencia y eliminarla.
-4. Mostrar métricas de incidencias por estado.
-5. Conservar información en `data/incidencias.properties` cuando reinicias la aplicación.
+---
 
-## Cómo ejecutarlo
-Requisitos: JDK 17+ y Maven 3.8+.
+## 1. Descripción del proyecto
 
-```sh
-cd jenkins_ci_udla
+**HelpDesk UDLA** es un sistema de gestión de incidencias que permite registrar solicitudes de soporte técnico, administrar prioridades, actualizar estados y consultar estadísticas.
+
+El proyecto se desarrolló como una aplicación funcional para demostrar el uso de un **pipeline de integración continua (CI)** mediante Jenkins.
+
+### Objetivo
+
+Automatizar la integración del código fuente, la compilación, la ejecución de pruebas y la notificación del resultado mediante un pipeline de tres etapas.
+
+---
+
+## 2. Tecnologías utilizadas
+
+| Tecnología | Descripción |
+|---|---|
+| **Java 17+** | Desarrollo de la lógica de negocio y servidor HTTP |
+| **HTML, CSS y JavaScript** | Interfaz web |
+| **Apache Maven** | Gestión del proyecto, compilación y generación del JAR |
+| **JUnit 5** | Pruebas unitarias y de integración |
+| **Git y GitHub** | Control de versiones y repositorio remoto |
+| **Jenkins** | Automatización del pipeline CI |
+| **Telegram Bot API** | Notificaciones de éxito o fallo |
+
+---
+
+## 3. Funcionalidades principales
+
+El sistema permite:
+
+- **Registrar incidencias** con título, descripción y prioridad.
+- **Consultar incidencias** registradas.
+- **Filtrar incidencias** según su estado.
+- **Cambiar el estado** de una incidencia.
+- **Eliminar incidencias**.
+- **Consultar estadísticas** de incidencias abiertas, en progreso y resueltas.
+- **Almacenar información localmente**, conservando los registros después de reiniciar la aplicación.
+
+### Prioridades disponibles
+
+- Baja
+- Media
+- Alta
+- Crítica
+
+### Estados disponibles
+
+- Abierto
+- En progreso
+- Resuelto
+
+---
+
+## 4. Estructura del proyecto
+
+```text
+Automatizacion_JENKINS/
+└── jenkins_ci_udla/
+    ├── Jenkinsfile
+    ├── pom.xml
+    ├── README.md
+    ├── .gitignore
+    └── src/
+        ├── main/
+        │   ├── java/
+        │   │   └── edu/udla/helpdesk/
+        │   │       ├── Main.java
+        │   │       ├── WebServer.java
+        │   │       ├── Incidencia.java
+        │   │       ├── IncidenciaService.java
+        │   │       ├── Estado.java
+        │   │       └── Prioridad.java
+        │   └── resources/
+        │       └── web/
+        │           └── index.html
+        └── test/
+            └── java/
+                └── edu/udla/helpdesk/
+                    ├── IncidenciaServiceTest.java
+                    └── WebServerTest.java
+```
+
+### Archivos importantes
+
+| Archivo | Función |
+|---|---|
+| `Jenkinsfile` | Define las tres etapas del pipeline |
+| `pom.xml` | Configura Maven y las dependencias |
+| `Main.java` | Punto de entrada de la aplicación |
+| `WebServer.java` | Gestiona las solicitudes HTTP |
+| `IncidenciaService.java` | Implementa la lógica de incidencias |
+| `IncidenciaServiceTest.java` | Pruebas unitarias |
+| `WebServerTest.java` | Pruebas de integración HTTP |
+
+---
+
+## 5. Requisitos previos
+
+Antes de ejecutar el proyecto se necesita:
+
+- **JDK 17 o superior**
+- **Apache Maven 3.8 o superior**
+- **Git**
+- **Navegador web**
+
+### Verificar Java
+
+```powershell
+java -version
+```
+
+### Verificar Maven
+
+```powershell
+mvn -version
+```
+
+### Verificar Git
+
+```powershell
+git --version
+```
+
+---
+
+## 6. Instalación y ejecución
+
+### Paso 1. Clonar el repositorio
+
+```powershell
+git clone https://github.com/ElPaul593/Automatizacion_JENKINS.git
+```
+
+### Paso 2. Acceder al proyecto
+
+```powershell
+cd Automatizacion_JENKINS\jenkins_ci_udla
+```
+
+### Paso 3. Compilar y ejecutar las pruebas
+
+```powershell
 mvn clean verify
+```
+
+Este comando:
+
+1. Limpia los archivos de compilaciones anteriores.
+2. Compila el código fuente.
+3. Ejecuta las pruebas automatizadas.
+4. Verifica el proyecto.
+5. Genera el archivo JAR.
+
+### Resultado esperado
+
+```text
+Tests run: 13, Failures: 0, Errors: 0, Skipped: 0
+
+BUILD SUCCESS
+```
+
+**Nota:** el resumen anterior representa el resultado esperado de una ejecución correcta.
+
+### Paso 4. Ejecutar la aplicación
+
+```powershell
 java -jar target/gestion-incidencias-1.0.0.jar
 ```
 
-En el navegador abre **http://localhost:8080**. Para cambiar el puerto define la variable de entorno `HELPDESK_PORT`; para cambiar dónde guardar los datos define `HELPDESK_DATA`.
+### Paso 5. Abrir la aplicación
 
-## API usada por el navegador
+Ingresar desde el navegador:
 
-| Método | Ruta | Operación |
+**http://localhost:8080**
+
+La aplicación mostrará la interfaz **HelpDesk — Gestión de Incidencias**.
+
+Para detener el servidor, presionar `Ctrl + C` en la terminal.
+
+---
+
+## 7. Pruebas automatizadas
+
+El proyecto incorpora **13 pruebas automatizadas con JUnit 5**.
+
+| Tipo de prueba | Cantidad | Propósito |
+|---|---:|---|
+| Pruebas unitarias | 11 | Verificar la lógica de gestión de incidencias |
+| Pruebas de integración HTTP | 2 | Verificar el comportamiento del servidor web |
+| **Total** | **13** | **Comprobar el funcionamiento del proyecto** |
+
+### Ejecutar todas las pruebas
+
+```powershell
+mvn clean verify
+```
+
+### Consultar los reportes
+
+Los resultados de JUnit se generan en:
+
+```text
+target/surefire-reports/
+```
+
+Para visualizar los resultados desde PowerShell:
+
+```powershell
+Get-ChildItem .\target\surefire-reports\*.txt |
+Select-String "Tests run:"
+```
+
+---
+
+## 8. API HTTP
+
+La aplicación utiliza los siguientes endpoints:
+
+| Método | Endpoint | Función |
 |---|---|---|
-| GET | `/` | Interfaz web |
-| GET | `/api/incidencias` | Listar incidencias |
-| GET | `/api/incidencias?estado=ABIERTO` | Filtrar |
-| POST | `/api/incidencias` | Crear (form-urlencoded: `titulo`, `descripcion`, `prioridad`) |
-| POST | `/api/incidencias/{id}/estado` | Cambiar estado (form-urlencoded: `estado`) |
-| DELETE | `/api/incidencias/{id}` | Eliminar |
-| GET | `/api/estadisticas` | Métricas |
+| `GET` | `/` | Mostrar la interfaz web |
+| `GET` | `/api/incidencias` | Consultar incidencias |
+| `GET` | `/api/incidencias?estado=ABIERTO` | Filtrar por estado |
+| `POST` | `/api/incidencias` | Registrar incidencia |
+| `POST` | `/api/incidencias/{id}/estado` | Actualizar estado |
+| `DELETE` | `/api/incidencias/{id}` | Eliminar incidencia |
+| `GET` | `/api/estadisticas` | Consultar estadísticas |
 
-Es un prototipo académico local: el servidor solo escucha en `127.0.0.1` y no implementa autenticación. No usar directamente en producción ni abrirlo a Internet.
+La aplicación utiliza almacenamiento local y no requiere una base de datos externa.
 
-## Configuración de Jenkins: PRIMERA TAREA
+**Importante:** se trata de un prototipo académico para ejecución local, sin autenticación de usuarios. No está preparado para su exposición directa a Internet.
 
-### Paso 1 — Subir los archivos al repositorio existente
-El repositorio GitHub ya existente es:
-`https://github.com/ElPaul593/Automatizacion_JENKINS`
+---
 
-La carpeta de este ZIP llamada **`jenkins_ci_udla`** debe sustituir la carpeta del mismo nombre en la **raíz** del repositorio GitHub. Elimina los archivos `Calculadora.java` y `CalculadoraTest.java` anteriores (para que no quede la calculadora).
+## 9. Integración continua con Jenkins
 
-No cambies el nombre de la carpeta, porque el Jenkinsfile utiliza `jenkins_ci_udla/pom.xml`.
+El proyecto utiliza un pipeline configurado mediante el archivo `Jenkinsfile`.
 
-### Paso 2 — Mantener la integración privada
-El repo debe volver a modo **Private** al realizar la demostración de ese requisito. En Jenkins debe existir una credencial de tipo *Username with password* con ID `github-private`: el usuario GitHub y un token PAT con permiso de lectura del repositorio (Contents: Read-only). No subas el token a GitHub.
+El pipeline está dividido en **tres etapas principales**.
 
-### Paso 3 — Configurar Jenkins (Windows)
-Este Jenkinsfile conserva los comandos Windows (`bat` y `powershell`) del proyecto original. El agente de Jenkins debe usar Windows y disponer de Git, Java 17+, Maven (en Jenkins configurado con el nombre exacto `Maven3`) y PowerShell.
+### Etapa 1. Integración con repositorio privado
 
-En el job, si usas **Pipeline script from SCM**:
-- Repository URL: `https://github.com/ElPaul593/Automatizacion_JENKINS.git`
-- Credentials: `github-private`
-- Branch: `*/main`
-- **Script Path: `jenkins_ci_udla/Jenkinsfile`** (no `Jenkinsfile` a secas).
+Jenkins obtiene el código fuente desde GitHub.
 
-Si en cambio tu job usa **Pipeline script** pegado directamente en la interfaz, actualiza el código ahí en lugar de depender del archivo del repositorio.
+**Repositorio:**
 
-### Paso 4 — Verificar la compilación y los tests
-Ejecuta `Build Now`. La etapa 2 usa:
+```text
+https://github.com/ElPaul593/Automatizacion_JENKINS.git
+```
+
+**Configuración:**
+
+- Rama: `main`
+- Credencial de Jenkins: `github-private`
+- Archivo del pipeline: `jenkins_ci_udla/Jenkinsfile`
+
+Para cumplir el requisito de integración privada, el repositorio debe estar configurado como **Private** y Jenkins debe disponer de los permisos correspondientes.
+
+### Etapa 2. Compilación y pruebas automatizadas
+
+Jenkins ejecuta Maven para compilar el sistema y ejecutar las pruebas JUnit.
+
+**Comando utilizado:**
 
 ```bat
 mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify
 ```
 
-En caso de éxito, Jenkins publica las pruebas JUnit y archiva el JAR de `target`.
+**Actividades automatizadas:**
 
-### Paso 5 — Configurar y verificar Telegram
-Los secretos se guardan en credenciales Jenkins de tipo *Secret text*, con IDs:
-- `telegram-bot-token`
-- `telegram-chat-id`
+- Compilación del código Java.
+- Ejecución de pruebas unitarias.
+- Ejecución de pruebas de integración.
+- Generación del archivo JAR.
+- Publicación de resultados JUnit.
+- Archivado del JAR generado.
 
-En la etapa 3 se envía un mensaje `EXITOSA` o `FALLIDA`. Para demostrar el caso de fallo, modifica temporalmente la expectativa de una prueba JUnit, haz commit y push, y ejecuta el pipeline; después revierte el cambio y vuelve a ejecutar. **No dejes las pruebas rotas como versión final.**
+**Resultado esperado:** compilación exitosa y 13 pruebas aprobadas.
 
-## Evidencias sugeridas
-- Repositorio privado con código del HelpDesk.
-- Aplicación en navegador creando y resolviendo incidencias.
-- Tres etapas del pipeline en Jenkins.
-- Log de `mvn clean verify` y reporte JUnit con 13 pruebas.
-- JAR generado y archivado.
-- Telegram notificando ejecución exitosa y fallida.
+### Etapa 3. Notificación por Telegram
 
-## Pensado para la SEGUNDA tarea (sin implementarla aún)
-Se puede añadir posteriormente análisis estático, reglas por ramas, ejecución paralela, cache Maven y librerías compartidas. El proyecto base y las pruebas se conservarán.
+El pipeline utiliza un bot de Telegram para comunicar el resultado de cada ejecución.
+
+**Tipos de notificación:**
+
+- `EXITOSA`: cuando la ejecución finaliza correctamente.
+- `FALLIDA`: cuando se produce un error en el pipeline.
+
+Los mensajes contienen:
+
+- Estado de la ejecución.
+- Nombre del trabajo de Jenkins.
+- Número de compilación.
+- Enlace a la ejecución.
+
+**Credenciales necesarias:**
+
+```text
+telegram-bot-token
+telegram-chat-id
+```
+
+Las credenciales se administran desde Jenkins y no deben almacenarse directamente en el repositorio.
+
+---
+
+## 10. Configuración del pipeline en Jenkins
+
+El Jenkinsfile está preparado para un agente **Windows**, utilizando comandos `bat` y `powershell`.
+
+### Herramientas necesarias en Jenkins
+
+- Git
+- Java 17 o superior
+- Apache Maven
+- PowerShell
+- Plugins de Pipeline, Git y JUnit
+
+Maven debe estar configurado en Jenkins con el nombre:
+
+```text
+Maven3
+```
+
+### Configuración del job
+
+Si se utiliza **Pipeline script from SCM**:
+
+| Campo | Valor |
+|---|---|
+| Repository URL | `https://github.com/ElPaul593/Automatizacion_JENKINS.git` |
+| Credentials | `github-private` |
+| Branch | `*/main` |
+| Script Path | `jenkins_ci_udla/Jenkinsfile` |
+
+Después, seleccionar **Build Now** para ejecutar el pipeline.
+
+---
+
+## 11. Evidencias de funcionamiento
+
+Para verificar el cumplimiento de la primera tarea se consideran las siguientes evidencias:
+
+### Integración con GitHub
+
+- Repositorio privado.
+- Configuración de credenciales.
+- Descarga correcta del código desde Jenkins.
+
+### Compilación y pruebas
+
+- Ejecución local de `mvn clean verify`.
+- Resultado `BUILD SUCCESS`.
+- Reportes de las 13 pruebas JUnit.
+- Archivo JAR generado.
+- Ejecución de la segunda etapa en Jenkins.
+
+### Notificaciones
+
+- Ejecución exitosa en Jenkins.
+- Ejecución fallida controlada.
+- Mensajes recibidos mediante Telegram.
+
+**Nota:** las verificaciones locales no sustituyen la ejecución real del pipeline en Jenkins.
+
+---
+
+## 12. Preparación para la segunda tarea
+
+HelpDesk también puede utilizarse para la siguiente práctica:
+
+**Configuración de un pipeline de entrega continua / Estrategias de optimización.**
+
+El proyecto puede ampliarse mediante:
+
+- **Análisis estático de código** con Checkstyle, PMD o SonarQube.
+- **Ejecución paralela** de pruebas y verificaciones.
+- **Caché de Maven** para optimizar las dependencias.
+- **Ejecución selectiva** por ramas y etapas.
+- **Pipelines modulares y reutilizables**.
+- **Estrategias de branching** para organizar el desarrollo.
+
+Estas funcionalidades corresponden a la segunda tarea y no forman parte de la implementación inicial.
+
+---
+
+## 13. Consideraciones finales
+
+HelpDesk UDLA es una aplicación funcional que permite demostrar cómo Jenkins automatiza procesos de integración continua sobre un proyecto Java real.
+
+Mediante GitHub, Maven, JUnit 5 y Telegram, se integran actividades de control de versiones, compilación, pruebas automatizadas y notificación de resultados.
+
+El proyecto proporciona una base para incorporar posteriormente estrategias avanzadas de optimización de pipelines.
+
+---
+
+**Universidad de Las Américas (UDLA)**  
+**Carrera:** Ingeniería de Software  
+**Proyecto:** HelpDesk — Gestión de Incidencias  
+**Asignatura:** Integración de Sistemas
