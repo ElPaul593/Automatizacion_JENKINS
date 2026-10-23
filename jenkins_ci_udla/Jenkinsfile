@@ -37,6 +37,18 @@ pipeline {
                         echo "Cache Maven JUnit: ${env.MAVEN_CACHE_JUNIT}"
                         echo "Cache Maven calidad: ${env.MAVEN_CACHE_CALIDAD}"
                     }
+                    // Estrategia definida para la segunda tarea.
+                    // Se usa el parametro porque el job puede NO ser Multibranch.
+                    script {
+                        def rama = params.BRANCH_A_CONSTRUIR?.trim()
+                        if (!(rama ==~ /^(main|feature\/[A-Za-z0-9._-]+|hotfix\/[A-Za-z0-9._-]+|docs\/[A-Za-z0-9._-]+)$/)) {
+                            error("Rama no admitida. Utiliza main, feature/*, hotfix/* o docs/*.")
+                        }
+                        def politica = rama.startsWith('docs/') ? 'Solo documentacion' :
+                            rama.startsWith('hotfix/') ? 'Compilacion y JUnit' :
+                            'Compilacion, JUnit y analisis de calidad'
+                        echo "Rama seleccionada: ${rama}; etapas: ${politica}"
+                    }
                     git branch: params.BRANCH_A_CONSTRUIR,
                         credentialsId: 'github-private',
                         url: env.GIT_URL
@@ -52,6 +64,10 @@ pipeline {
             }
             parallel {
                 stage('2A - Compilacion y pruebas JUnit') {
+                    // docs/* no cambia el codigo Java: omitimos el build.
+                    when {
+                        expression { !params.BRANCH_A_CONSTRUIR.startsWith('docs/') }
+                    }
                     steps {
                         dir('ci-build') {
                             unstash 'codigo-helpdesk'
@@ -73,6 +89,14 @@ pipeline {
                 }
 
                 stage('2B - Checkstyle y PMD') {
+                    // Analisis completo en main y feature/*.
+                    // En hotfix/* se priorizan las pruebas rapidas.
+                    when {
+                        expression {
+                            params.BRANCH_A_CONSTRUIR == 'main' ||
+                                params.BRANCH_A_CONSTRUIR.startsWith('feature/')
+                        }
+                    }
                     steps {
                         dir('ci-quality') {
                             unstash 'codigo-helpdesk'
@@ -88,6 +112,22 @@ pipeline {
                         always {
                             archiveArtifacts allowEmptyArchive: true,
                                 artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
+                        }
+                    }
+                }
+
+                stage('2C - Comprobar documentacion') {
+                    // Una rama docs/* valida README sin compilar Java.
+                    when {
+                        expression { params.BRANCH_A_CONSTRUIR.startsWith('docs/') }
+                    }
+                    steps {
+                        dir('ci-docs') {
+                            unstash 'codigo-helpdesk'
+                            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                                bat 'if not exist "jenkins_ci_udla\\README.md" exit /b 1'
+                                echo 'Validacion de README completada.'
+                            }
                         }
                     }
                 }
