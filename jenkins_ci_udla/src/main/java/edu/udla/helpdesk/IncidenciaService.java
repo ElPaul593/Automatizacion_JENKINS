@@ -21,6 +21,8 @@ import java.util.Properties;
  * Se sincronizan las operaciones para proteger el almacenamiento en memoria.
  */
 public final class IncidenciaService {
+    private static final int MAX_LONGITUD_DESCRIPCION = 1000;
+    private static final String PREFIJO_INCIDENTE = "incidente.";
     private final Path archivo;
     private final Map<Integer, Incidencia> incidencias = new LinkedHashMap<>();
     private int siguienteId = 1;
@@ -104,7 +106,7 @@ public final class IncidenciaService {
 
     private static String validarDescripcion(String descripcion) {
         String valor = descripcion == null ? "" : descripcion.trim();
-        if (valor.length() > 1000) {
+        if (valor.length() > MAX_LONGITUD_DESCRIPCION) {
             throw new IllegalArgumentException("La descripcion no puede exceder 1000 caracteres");
         }
         return valor;
@@ -121,13 +123,13 @@ public final class IncidenciaService {
         siguienteId = Integer.parseInt(p.getProperty("siguienteId", "1"));
         List<Integer> ids = new ArrayList<>();
         for (String nombre : p.stringPropertyNames()) {
-            if (nombre.startsWith("incidente.") && nombre.endsWith(".titulo")) {
-                String id = nombre.substring("incidente.".length(), nombre.length() - ".titulo".length());
+            if (nombre.startsWith(PREFIJO_INCIDENTE) && nombre.endsWith(".titulo")) {
+                String id = nombre.substring(PREFIJO_INCIDENTE.length(), nombre.length() - ".titulo".length());
                 ids.add(Integer.parseInt(id));
             }
         }
         for (int id : ids) {
-            String prefijo = "incidente." + id + ".";
+            String prefijo = PREFIJO_INCIDENTE + id + ".";
             Incidencia i = new Incidencia(id,
                     p.getProperty(prefijo + "titulo"),
                     p.getProperty(prefijo + "descripcion", ""),
@@ -145,7 +147,7 @@ public final class IncidenciaService {
         Properties p = new Properties();
         p.setProperty("siguienteId", String.valueOf(proximoId));
         for (Incidencia i : elementos.values()) {
-            String prefijo = "incidente." + i.id() + ".";
+            String prefijo = PREFIJO_INCIDENTE + i.id() + ".";
             p.setProperty(prefijo + "titulo", i.titulo());
             p.setProperty(prefijo + "descripcion", i.descripcion());
             p.setProperty(prefijo + "prioridad", i.prioridad().name());
