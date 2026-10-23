@@ -46,4 +46,58 @@
             </plugin>
         </plugins>
     </build>
+    <!-- Etapa de calidad de la tarea 2: ejecutable con mvn -Pcalidad clean verify.
+         En esta primera fase solo crea informes; revisaremos hallazgos antes de
+         activar reglas que hagan fallar el build. -->
+    <profiles>
+        <profile>
+            <id>calidad</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-checkstyle-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <configuration>
+                            <configLocation>${project.basedir}/config/checkstyle.xml</configLocation>
+                            <encoding>UTF-8</encoding>
+                            <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                            <linkXRef>false</linkXRef>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>reporte-checkstyle</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>checkstyle</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-pmd-plugin</artifactId>
+                        <version>3.28.0</version>
+                        <configuration>
+                            <targetJdk>17</targetJdk>
+                            <linkXRef>false</linkXRef>
+                            <rulesets>
+                                <ruleset>/category/java/bestpractices.xml</ruleset>
+                                <ruleset>/category/java/errorprone.xml</ruleset>
+                            </rulesets>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>reporte-pmd</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>pmd</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
