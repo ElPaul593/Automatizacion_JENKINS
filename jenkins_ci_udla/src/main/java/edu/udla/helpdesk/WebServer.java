@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.util.logging.Logger;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 
 /** API HTTP y sitio web para registrar, listar, actualizar y eliminar incidencias. */
 public final class WebServer {
+    private static final Logger LOGGER = Logger.getLogger(WebServer.class.getName());
     private final HttpServer server;
     private final IncidenciaService service;
     private final ExecutorService executor;
@@ -47,7 +49,7 @@ public final class WebServer {
         try {
             String ruta = ex.getRequestURI().getPath();
             String metodo = ex.getRequestMethod();
-            if (ruta.equals("/") && metodo.equals("GET")) {
+            if ("/".equals(ruta) && "GET".equals(metodo)) {
                 try (InputStream entrada = WebServer.class.getResourceAsStream("/web/index.html")) {
                     if (entrada == null) {
                         enviar(ex, 500, "text/plain", "No se encontro la interfaz");
@@ -55,7 +57,7 @@ public final class WebServer {
                         enviar(ex, 200, "text/html", new String(entrada.readAllBytes(), StandardCharsets.UTF_8));
                     }
                 }
-            } else if (ruta.equals("/api/incidencias") && metodo.equals("GET")) {
+            } else if ("/api/incidencias".equals(ruta) && "GET".equals(metodo)) {
                 Map<String, String> q = parametros(ex.getRequestURI().getRawQuery());
                 Estado estado = q.containsKey("estado") && !q.get("estado").isBlank()
                         ? Estado.valueOf(q.get("estado")) : null;
@@ -64,23 +66,23 @@ public final class WebServer {
                     objetos.add(jsonIncidencia(i));
                 }
                 enviar(ex, 200, "application/json", "[" + String.join(",", objetos) + "]");
-            } else if (ruta.equals("/api/incidencias") && metodo.equals("POST")) {
+            } else if ("/api/incidencias".equals(ruta) && "POST".equals(metodo)) {
                 Map<String, String> datos = cuerpoFormulario(ex);
                 Incidencia i = service.crear(datos.get("titulo"), datos.get("descripcion"),
                         Prioridad.valueOf(datos.getOrDefault("prioridad", "MEDIA")));
                 enviar(ex, 201, "application/json", jsonIncidencia(i));
-            } else if (ruta.equals("/api/estadisticas") && metodo.equals("GET")) {
+            } else if ("/api/estadisticas".equals(ruta) && "GET".equals(metodo)) {
                 Map<Estado, Long> c = service.contarPorEstado();
                 String json = "{\"total\":" + service.total()
                         + ",\"abiertas\":" + c.get(Estado.ABIERTO)
                         + ",\"enProgreso\":" + c.get(Estado.EN_PROGRESO)
                         + ",\"resueltas\":" + c.get(Estado.RESUELTO) + "}";
                 enviar(ex, 200, "application/json", json);
-            } else if (ruta.matches("/api/incidencias/[0-9]+") && metodo.equals("DELETE")) {
+            } else if (ruta.matches("/api/incidencias/[0-9]+") && "DELETE".equals(metodo)) {
                 int id = Integer.parseInt(ruta.substring(ruta.lastIndexOf('/') + 1));
                 service.eliminar(id);
                 enviar(ex, 200, "application/json", "{\"eliminado\":true}");
-            } else if (ruta.matches("/api/incidencias/[0-9]+/estado") && metodo.equals("POST")) {
+            } else if (ruta.matches("/api/incidencias/[0-9]+/estado") && "POST".equals(metodo)) {
                 String[] partes = ruta.split("/");
                 int id = Integer.parseInt(partes[3]);
                 Estado nuevo = Estado.valueOf(parametros(leerCuerpo(ex)).get("estado"));
@@ -96,7 +98,7 @@ public final class WebServer {
         } catch (NoSuchElementException e) {
             enviar(ex, 404, "application/json", "{\"error\":" + jsonString(e.getMessage()) + "}");
         } catch (Exception e) {
-            System.err.println("Error de servidor: " + e.getMessage());
+            LOGGER.warning("Error de servidor: " + e.getMessage());
             enviar(ex, 500, "application/json", "{\"error\":\"Error interno del servidor\"}");
         } finally {
             ex.close();
@@ -125,7 +127,9 @@ public final class WebServer {
             return datos;
         }
         for (String parte : query.split("&")) {
-            if (parte.isBlank()) continue;
+            if (parte.isBlank()) {
+                continue;
+            }
             String[] par = parte.split("=", 2);
             datos.put(URLDecoder.decode(par[0], StandardCharsets.UTF_8),
                     URLDecoder.decode(par.length > 1 ? par[1] : "", StandardCharsets.UTF_8));
@@ -142,10 +146,10 @@ public final class WebServer {
     }
 
     private static String jsonString(String texto) {
-        if (texto == null) texto = "";
+        String valor = texto == null ? "" : texto;
         StringBuilder b = new StringBuilder("\"");
-        for (int k = 0; k < texto.length(); k++) {
-            char c = texto.charAt(k);
+        for (int k = 0; k < valor.length(); k++) {
+            char c = valor.charAt(k);
             switch (c) {
                 case '"' -> b.append("\\\"");
                 case '\\' -> b.append("\\\\");
@@ -153,8 +157,11 @@ public final class WebServer {
                 case '\r' -> b.append("\\r");
                 case '\t' -> b.append("\\t");
                 default -> {
-                    if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
-                    else b.append(c);
+                    if (c < 0x20) {
+                        b.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        b.append(c);
+                    }
                 }
             }
         }
