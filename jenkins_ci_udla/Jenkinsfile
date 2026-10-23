@@ -6,6 +6,15 @@ pipeline {
         timestamps()
     }
 
+    // La segunda tarea se ejecuta en su propia rama sin modificar main.
+    parameters {
+        string(
+            name: 'BRANCH_A_CONSTRUIR',
+            defaultValue: 'feature/pipeline-optimizacion',
+            description: 'Rama del proyecto que se compilara en Jenkins'
+        )
+    }
+
     tools {
         maven 'Maven3'
     }
@@ -18,27 +27,57 @@ pipeline {
         stage('1 - Integracion repositorio privado') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    git branch: 'main',
+                    // Evita reutilizar archivos viejos en el workspace del job.
+                    deleteDir()
+                    git branch: params.BRANCH_A_CONSTRUIR,
                         credentialsId: 'github-private',
                         url: env.GIT_URL
                     bat 'git rev-parse --short HEAD'
+                    stash name: 'codigo-helpdesk', includes: 'jenkins_ci_udla/**'
                 }
             }
         }
 
-        stage('2 - Compilacion y tests automatizados') {
+        stage('2 - Validaciones en paralelo') {
             when {
                 expression { currentBuild.currentResult == 'SUCCESS' }
             }
-            steps {
-                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify'
+            parallel {
+                stage('2A - Compilacion y pruebas JUnit') {
+                    steps {
+                        dir('ci-build') {
+                            unstash 'codigo-helpdesk'
+                            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                                bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify'
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true,
+                                testResults: 'ci-build/jenkins_ci_udla/target/surefire-reports/*.xml'
+                            archiveArtifacts allowEmptyArchive: true,
+                                artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
+                        }
+                    }
                 }
-            }
-            post {
-                always {
-                    junit allowEmptyResults: true, testResults: 'jenkins_ci_udla/target/surefire-reports/*.xml'
-                    archiveArtifacts allowEmptyArchive: true, artifacts: 'jenkins_ci_udla/target/*.jar'
+
+                stage('2B - Checkstyle y PMD') {
+                    steps {
+                        dir('ci-quality') {
+                            unstash 'codigo-helpdesk'
+                            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                                // El otro bloque ya ejecuta JUnit; aqui solo generamos calidad.
+                                bat 'mvn -B -ntp -Pcalidad -DskipTests -f jenkins_ci_udla/pom.xml clean verify'
+                            }
+                        }
+                    }
+                    post {
+                        always {
+                            archiveArtifacts allowEmptyArchive: true,
+                                artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
+                        }
+                    }
                 }
             }
         }
