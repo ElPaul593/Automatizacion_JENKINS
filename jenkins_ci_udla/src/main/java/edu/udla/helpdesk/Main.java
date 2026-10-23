@@ -1,6 +1,7 @@
 package edu.udla.helpdesk;
 
 import java.nio.file.Path;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class Main {
@@ -12,6 +13,8 @@ public final class Main {
         Path archivo = Path.of(System.getenv().getOrDefault("HELPDESK_DATA", "data/incidencias.properties"));
         WebServer servidor = new WebServer(new IncidenciaService(archivo), puerto);
         servidor.iniciar();
-        LOGGER.info("Sistema de incidencias disponible en http://localhost:" + servidor.puerto());
+        if (LOGGER.isLoggable(Level.INFO)) {
+            LOGGER.info("Sistema de incidencias disponible en http://localhost:" + servidor.puerto());
+        }
     }
 }
