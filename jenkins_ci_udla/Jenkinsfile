@@ -27,8 +27,16 @@ pipeline {
         stage('1 - Integracion repositorio privado') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    // Evita reutilizar archivos viejos en el workspace del job.
+                    // Limpia el codigo, pero NO los caches Maven: se mantienen
+                    // como carpetas hermanas del workspace entre ejecuciones.
                     deleteDir()
+                    script {
+                        def raizWorkspace = pwd()
+                        env.MAVEN_CACHE_JUNIT = "${raizWorkspace}@maven-cache-junit"
+                        env.MAVEN_CACHE_CALIDAD = "${raizWorkspace}@maven-cache-calidad"
+                        echo "Cache Maven JUnit: ${env.MAVEN_CACHE_JUNIT}"
+                        echo "Cache Maven calidad: ${env.MAVEN_CACHE_CALIDAD}"
+                    }
                     git branch: params.BRANCH_A_CONSTRUIR,
                         credentialsId: 'github-private',
                         url: env.GIT_URL
@@ -48,7 +56,9 @@ pipeline {
                         dir('ci-build') {
                             unstash 'codigo-helpdesk'
                             catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                                bat 'mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify'
+                                // Directorio fuera del workspace y exclusivo de esta rama paralela.
+                                bat 'echo Cache persistente Maven JUnit: %MAVEN_CACHE_JUNIT%'
+                                bat 'mvn -B -ntp "-Dmaven.repo.local=%MAVEN_CACHE_JUNIT%" -f jenkins_ci_udla/pom.xml clean verify'
                             }
                         }
                     }
@@ -68,7 +78,9 @@ pipeline {
                             unstash 'codigo-helpdesk'
                             catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                                 // El otro bloque ya ejecuta JUnit; aqui solo generamos calidad.
-                                bat 'mvn -B -ntp -Pcalidad -DskipTests -f jenkins_ci_udla/pom.xml clean verify'
+                                // Cache separada para evitar escrituras Maven concurrentes.
+                                bat 'echo Cache persistente Maven calidad: %MAVEN_CACHE_CALIDAD%'
+                                bat 'mvn -B -ntp "-Dmaven.repo.local=%MAVEN_CACHE_CALIDAD%" -Pcalidad -DskipTests -f jenkins_ci_udla/pom.xml clean verify'
                             }
                         }
                     }
