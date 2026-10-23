@@ -24,8 +24,8 @@ public final class WebServer {
     private static final Logger LOGGER = Logger.getLogger(WebServer.class.getName());
     private static final int MAX_CUERPO_BYTES = 65536;
     private static final int LIMITE_CARACTER_CONTROL = 0x20;
-    private static final String PARAM_ESTADO = PARAM_ESTADO;
-    private static final String TIPO_JSON = TIPO_JSON;
+    private static final String PARAM_ESTADO = "estado";
+    private static final String TIPO_JSON = "application/json";
     private final HttpServer server;
     private final IncidenciaService service;
     private final ExecutorService executor;
