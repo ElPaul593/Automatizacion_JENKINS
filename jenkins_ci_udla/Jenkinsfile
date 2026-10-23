@@ -137,17 +137,34 @@ pipeline {
             }
         }
 
-        stage('3 - Notificacion Telegram') {
-            steps {
-                script {
-                    def estado = currentBuild.currentResult == 'SUCCESS' ? 'EXITOSA' : 'FALLIDA'
-                    def mensaje = "Jenkins UDLA: ${estado} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
-                    withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
-                        withCredentials([
-                            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
-                            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
-                        ]) {
-                            powershell '''
+    }
+    post {
+        always {
+            echo "Pipeline finalizado | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | Estado: ${currentBuild.currentResult}"
+        }
+        success {
+            script {
+                notificarTelegram('EXITOSA')
+            }
+        }
+        failure {
+            script {
+                notificarTelegram('FALLIDA')
+            }
+        }
+    }
+}
+
+// Esta funcion esta en el Jenkinsfile (no en el codigo obtenido por checkout)
+// para poder avisar incluso si falla el acceso al repositorio privado.
+def notificarTelegram(String estado) {
+    def mensaje = "Jenkins UDLA: ${estado} | Rama: ${params.BRANCH_A_CONSTRUIR} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
+    withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
+        withCredentials([
+            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
+            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
+        ]) {
+            powershell '''
 $ErrorActionPreference = 'Stop'
 $uri = 'https://api.telegram.org/bot' + $env:BOT_TOKEN + '/sendMessage'
 $body = @{
@@ -157,10 +174,6 @@ $body = @{
 Invoke-RestMethod -Method Post -Uri $uri -Body $body -ErrorAction Stop | Out-Null
 Write-Host 'Notificacion enviada a Telegram.'
 '''
-                        }
-                    }
-                }
-            }
         }
     }
 }
