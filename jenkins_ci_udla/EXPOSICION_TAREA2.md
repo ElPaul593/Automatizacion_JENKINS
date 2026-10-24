@@ -49,20 +49,20 @@ El bloque **`post` no es una quinta etapa**: informa por Telegram un resultado E
 
 **Guion sugerido:** «No todos los cambios requieren las mismas pruebas. Por eso usamos condiciones por ramas. Para evitar duplicar comandos, cargamos funciones Groovy reutilizables. Al finalizar, Jenkins publica los resultados y Telegram recibe el estado».
 
-## Variables y credenciales: configurar en JENKINS (no en GitHub)
+## Conexion GitHub y Telegram: reutilizar las credenciales ya existentes
 
-El administrador debe definir las siguientes **variables de entorno en Jenkins**, globalmente o para el job:
+El Jenkinsfile de la tarea 2 utiliza el mismo repositorio y los **mismos IDs de credenciales que la tarea 1**, sin variables nuevas obligatorias. El job debe apuntar a `*/feature/pipeline-optimizacion` con script path `jenkins_ci_udla/Jenkinsfile`.
 
-| Variable Jenkins | Ejemplo de configuracion | ¿Es secreto? |
-|---|---|---|
-| `CI_REPO_URL` | `https://github.com/ElPaul593/Automatizacion_JENKINS.git` | No |
-| `CI_GITHUB_CREDENTIAL_ID` | `github-private` (opcional si el repo es publico) | No: es solo el ID de una credencial |
-| `CI_TELEGRAM_TOKEN_CREDENTIAL_ID` | `telegram-bot-token` | No: es solo el ID de un Secret Text |
-| `CI_TELEGRAM_CHAT_CREDENTIAL_ID` | `telegram-chat-id` | No: es solo el ID de un Secret Text |
+| Concepto | Configuracion existente |
+|---|---|
+| Repositorio (URL publica, no secreta) | `https://github.com/ElPaul593/Automatizacion_JENKINS.git` |
+| ID credencial GitHub | `github-private` |
+| ID token bot Telegram | `telegram-bot-token` |
+| ID chat Telegram | `telegram-chat-id` |
 
-Los **valores reales del token y del chat** se almacenan en **Jenkins > Credentials** como `Secret text`. No deben ponerse como texto plano en el Jenkinsfile, en variables publicas ni en capturas.
+Los **valores reales** del token, del chat y de GitHub permanecen en **Jenkins > Credentials**. Los identificadores NO son claves reales, pueden aparecer en el Jenkinsfile y ya se utilizan en `main`. No configurar `CI_REPO_URL`, `CI_GITHUB_CREDENTIAL_ID`, `CI_TELEGRAM_TOKEN_CREDENTIAL_ID` ni `CI_TELEGRAM_CHAT_CREDENTIAL_ID`: esas variables se eliminaron del Jenkinsfile nuevo tras diagnosticar un build fallido por falta de configuracion.
 
-Tambien deben existir un agente Windows con PowerShell/Git y una instalacion Maven cuyo nombre en *Global Tool Configuration* sea **Maven3**. En el job **Pipeline script from SCM**, seleccionar la rama `*/feature/pipeline-optimizacion` y `jenkins_ci_udla/Jenkinsfile`.
+Tambien deben existir un agente Windows con PowerShell/Git y una instalacion Maven cuyo nombre en *Global Tool Configuration* sea **Maven3**.
 
 ## Que falta para demostrarlo
 
@@ -126,5 +126,5 @@ El `load` permite reutilizar codigo de otro archivo del workspace, no crea autom
 
 ## Exigencias aun pendientes
 
-La existencia del codigo no demuestra que funcione en el servidor. Faltan la validacion real de las cuatro etapas, las notificaciones, las mediciones de tiempo, las ramas `docs/*`/`hotfix/*` de demostracion y las capturas para el informe. Tambien hay que comprobar que el job tenga las variables de Jenkins y las credenciales Secret Text configuradas.
+La existencia del codigo no demuestra que funcione en el servidor. Faltan la validacion real de las cuatro etapas, las notificaciones, las mediciones de tiempo, las ramas `docs/*`/`hotfix/*` de demostracion y las capturas para el informe. Comprobar que Jenkins mantenga las credenciales ya utilizadas por la tarea 1 y que el job de la tarea 2 lea la rama correcta.
 
