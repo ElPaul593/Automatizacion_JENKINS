@@ -1,72 +1,112 @@
+/*
+ * TAREA 2 - HelpDesk UDLA | Pipeline CI optimizado
+ * Proyecto: gestion de incidencias de soporte tecnico con Java y Maven.
+ * Pruebas automaticas: 13 JUnit (11 unitarias y 2 de integracion HTTP).
+ *
+ * ETAPAS DE LA EXPOSICION:
+ * 1. Integracion GitHub
+ * 2. Preparar caches y archivos
+ * 3. Verificaciones paralelas y selectivas
+ * 4. Publicar resultados
+ *
+ * CUATRO ESTRATEGIAS: paralelismo, cache, seleccion por rama y modularidad.
+ * post envia notificaciones al final: NO es una etapa de despliegue.
+ *
+ * Jenkins debe configurar CI_REPO_URL y, si es privado,
+ * CI_GITHUB_CREDENTIAL_ID. No colocar claves ni tokens en este archivo.
+ */
 pipeline {
+    // Requiere un agente Windows (bat y PowerShell).
     agent any
 
     options {
         skipDefaultCheckout(true)
         timestamps()
+        // Evita dos ejecuciones del mismo job modificando las mismas caches.
+        disableConcurrentBuilds()
     }
 
-    // La segunda tarea se ejecuta en su propia rama sin modificar main.
     parameters {
         string(
             name: 'BRANCH_A_CONSTRUIR',
             defaultValue: 'feature/pipeline-optimizacion',
-            description: 'Rama del proyecto que se compilara en Jenkins'
+            description: 'Rama: main, feature/*, hotfix/* o docs/*'
         )
     }
 
+    // Alias de Maven configurado en Jenkins (no es una clave secreta).
     tools {
         maven 'Maven3'
     }
 
-    environment {
-        GIT_URL = 'https://github.com/ElPaul593/Automatizacion_JENKINS.git'
-    }
-
     stages {
-        stage('1 - Integracion repositorio privado') {
+        // ETAPA 1: validar la rama y descargar el repositorio con Git.
+        // URL e identificador de credencial provienen del servidor Jenkins.
+        stage('1 - Integracion con GitHub') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                    // Limpia el codigo, pero NO los caches Maven: se mantienen
-                    // como carpetas hermanas del workspace entre ejecuciones.
-                    deleteDir()
-                    script {
-                        def raizWorkspace = pwd()
-                        env.MAVEN_CACHE_JUNIT = "${raizWorkspace}@maven-cache-junit"
-                        env.MAVEN_CACHE_CALIDAD = "${raizWorkspace}@maven-cache-calidad"
-                        echo "Cache Maven JUnit: ${env.MAVEN_CACHE_JUNIT}"
-                        echo "Cache Maven calidad: ${env.MAVEN_CACHE_CALIDAD}"
-                    }
-                    // Estrategia definida para la segunda tarea.
-                    // Se usa el parametro porque el job puede NO ser Multibranch.
                     script {
                         def rama = params.BRANCH_A_CONSTRUIR?.trim()
                         if (!(rama ==~ /^(main|feature\/[A-Za-z0-9._-]+|hotfix\/[A-Za-z0-9._-]+|docs\/[A-Za-z0-9._-]+)$/)) {
-                            error("Rama no admitida. Utiliza main, feature/*, hotfix/* o docs/*.")
+                            error('Rama invalida. Usar main, feature/*, hotfix/* o docs/*.')
                         }
-                        def politica = rama.startsWith('docs/') ? 'Solo documentacion' :
-                            rama.startsWith('hotfix/') ? 'Compilacion y JUnit' :
-                            'Compilacion, JUnit y analisis de calidad'
-                        echo "Rama seleccionada: ${rama}; etapas: ${politica}"
+                        if (!env.CI_REPO_URL?.trim()) {
+                            error('Configurar CI_REPO_URL en Jenkins antes de ejecutar.')
+                        }
+                        env.CI_RAMA = rama
+                        env.CI_PREPARADA = 'false'
+                        def politica = rama.startsWith('docs/') ? 'Solo README' :
+                            rama.startsWith('hotfix/') ? 'JUnit' : 'JUnit y calidad'
+                        echo "Rama: ${env.CI_RAMA} | Ejecucion: ${politica}"
                     }
-                    git branch: params.BRANCH_A_CONSTRUIR,
-                        credentialsId: 'github-private',
-                        url: env.GIT_URL
+                    deleteDir()
+                    script {
+                        if (env.CI_GITHUB_CREDENTIAL_ID?.trim()) {
+                            git branch: env.CI_RAMA,
+                                credentialsId: env.CI_GITHUB_CREDENTIAL_ID,
+                                url: env.CI_REPO_URL
+                        } else {
+                            // El checkout publico puede ejecutarse sin token.
+                            git branch: env.CI_RAMA, url: env.CI_REPO_URL
+                        }
+                    }
                     bat 'git rev-parse --short HEAD'
-                    stash name: 'codigo-helpdesk', includes: 'jenkins_ci_udla/**'
                 }
             }
         }
 
-        stage('2 - Validaciones en paralelo') {
+        // ETAPA 2: habilitar caches persistentes y guardar el codigo.
+        // stash permite restaurar los mismos archivos en ramas paralelas.
+        stage('2 - Preparar cache y archivos') {
             when {
                 expression { currentBuild.currentResult == 'SUCCESS' }
             }
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    script {
+                        def workspace = pwd()
+                        env.MAVEN_CACHE_JUNIT = "${workspace}@maven-cache-junit"
+                        env.MAVEN_CACHE_CALIDAD = "${workspace}@maven-cache-calidad"
+                        echo 'Caches Maven de pruebas y calidad preparadas.'
+                    }
+                    stash name: 'codigo-helpdesk', includes: 'jenkins_ci_udla/**'
+                    script { env.CI_PREPARADA = 'true' }
+                }
+            }
+        }
+
+        // ETAPA 3: ejecucion paralela de controles independientes.
+        // when decide las verificaciones segun la rama (ejecucion selectiva).
+        // load permite reutilizar el modulo TareasHelpDesk.groovy.
+        stage('3 - Validaciones paralelas y selectivas') {
+            when {
+                expression { env.CI_PREPARADA == 'true' && currentBuild.currentResult == 'SUCCESS' }
+            }
             parallel {
-                stage('2A - Compilacion y pruebas JUnit') {
-                    // docs/* no cambia el codigo Java: omitimos el build.
+                // 3A - Compila, ejecuta 13 tests JUnit y produce el JAR.
+                stage('3A - Compilacion y JUnit') {
                     when {
-                        expression { !params.BRANCH_A_CONSTRUIR.startsWith('docs/') }
+                        expression { !env.CI_RAMA.startsWith('docs/') }
                     }
                     steps {
                         dir('ci-build') {
@@ -79,23 +119,14 @@ pipeline {
                             }
                         }
                     }
-                    post {
-                        always {
-                            junit allowEmptyResults: true,
-                                testResults: 'ci-build/jenkins_ci_udla/target/surefire-reports/*.xml'
-                            archiveArtifacts allowEmptyArchive: true,
-                                artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
-                        }
-                    }
                 }
 
-                stage('2B - Checkstyle y PMD') {
-                    // Analisis completo en main y feature/*.
-                    // En hotfix/* se priorizan las pruebas rapidas.
+                // 3B - Analisis estatico con Checkstyle y PMD.
+                // Su cache es independiente para evitar colisiones con JUnit.
+                stage('3B - Checkstyle y PMD') {
                     when {
                         expression {
-                            params.BRANCH_A_CONSTRUIR == 'main' ||
-                                params.BRANCH_A_CONSTRUIR.startsWith('feature/')
+                            env.CI_RAMA == 'main' || env.CI_RAMA.startsWith('feature/')
                         }
                     }
                     steps {
@@ -109,18 +140,12 @@ pipeline {
                             }
                         }
                     }
-                    post {
-                        always {
-                            archiveArtifacts allowEmptyArchive: true,
-                                artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
-                        }
-                    }
                 }
 
-                stage('2C - Comprobar documentacion') {
-                    // Una rama docs/* valida README sin compilar Java.
+                // 3C - Solo en docs/*: verificar que exista el README.
+                stage('3C - Revisar documentacion') {
                     when {
-                        expression { params.BRANCH_A_CONSTRUIR.startsWith('docs/') }
+                        expression { env.CI_RAMA.startsWith('docs/') }
                     }
                     steps {
                         dir('ci-docs') {
@@ -137,42 +162,70 @@ pipeline {
             }
         }
 
+        // ETAPA 4: publicar reportes y JAR para consultarlos en Jenkins.
+        // Continua aunque la etapa 3 haya marcado un fallo con catchError.
+        stage('4 - Publicar resultados') {
+            when {
+                expression { env.CI_PREPARADA == 'true' }
+            }
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    script {
+                        if (!env.CI_RAMA.startsWith('docs/')) {
+                            junit allowEmptyResults: true,
+                                testResults: 'ci-build/jenkins_ci_udla/target/surefire-reports/*.xml'
+                            archiveArtifacts allowEmptyArchive: true,
+                                artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
+                        }
+                        if (env.CI_RAMA == 'main' || env.CI_RAMA.startsWith('feature/')) {
+                            archiveArtifacts allowEmptyArchive: true,
+                                artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
+                        }
+                        echo "Rama: ${env.CI_RAMA} | Resultado: ${currentBuild.currentResult}"
+                    }
+                }
+            }
+        }
     }
+
+    // POST: notificaciones al finalizar, NO una quinta etapa.
     post {
         always {
             echo "Pipeline finalizado | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | Estado: ${currentBuild.currentResult}"
         }
         success {
-            script {
-                notificarTelegram('EXITOSA')
-            }
+            script { notificarTelegram('EXITOSA') }
         }
         failure {
-            script {
-                notificarTelegram('FALLIDA')
-            }
+            script { notificarTelegram('FALLIDA') }
         }
     }
 }
 
-// Esta funcion esta en el Jenkinsfile (no en el codigo obtenido por checkout)
-// para poder avisar incluso si falla el acceso al repositorio privado.
+// Los tokens NO se guardan en el repositorio.
+// Jenkins Credentials guarda los Secret Text; las variables contienen sus IDs.
 def notificarTelegram(String estado) {
-    def mensaje = "Jenkins UDLA: ${estado} | Rama: ${params.BRANCH_A_CONSTRUIR} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
+    def tokenId = env.CI_TELEGRAM_TOKEN_CREDENTIAL_ID?.trim()
+    def chatId = env.CI_TELEGRAM_CHAT_CREDENTIAL_ID?.trim()
+    if (!tokenId || !chatId) {
+        error('Configurar CI_TELEGRAM_TOKEN_CREDENTIAL_ID y CI_TELEGRAM_CHAT_CREDENTIAL_ID en Jenkins.')
+    }
+    def mensaje = "Jenkins UDLA: ${estado} | Rama: ${env.CI_RAMA ?: params.BRANCH_A_CONSTRUIR} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
     withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
         withCredentials([
-            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
-            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
+            string(credentialsId: tokenId, variable: 'BOT_TOKEN'),
+            string(credentialsId: chatId, variable: 'CHAT_ID')
         ]) {
             powershell '''
 $ErrorActionPreference = 'Stop'
-$uri = 'https://api.telegram.org/bot' + $env:BOT_TOKEN + '/sendMessage'
-$body = @{
-    chat_id = $env:CHAT_ID
-    text = $env:TELEGRAM_MESSAGE
+try {
+    $uri = 'https://api.telegram.org/bot' + $env:BOT_TOKEN + '/sendMessage'
+    $body = @{ chat_id = $env:CHAT_ID; text = $env:TELEGRAM_MESSAGE }
+    Invoke-RestMethod -Method Post -Uri $uri -Body $body -ErrorAction Stop | Out-Null
+    Write-Host 'Notificacion enviada a Telegram.'
+} catch {
+    throw 'No se pudo enviar el mensaje de Telegram. Revisar credenciales y red.'
 }
-Invoke-RestMethod -Method Post -Uri $uri -Body $body -ErrorAction Stop | Out-Null
-Write-Host 'Notificacion enviada a Telegram.'
 '''
         }
     }
