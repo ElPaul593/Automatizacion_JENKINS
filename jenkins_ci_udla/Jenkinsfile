@@ -23,9 +23,15 @@ pipeline {
         maven 'Maven3'
     }
 
+    // URL publica del repositorio (no es secreta). Se reutiliza la
+    // configuracion de GitHub ya comprobada en el job de la tarea 1.
+    environment {
+        GIT_URL = 'https://github.com/ElPaul593/Automatizacion_JENKINS.git'
+    }
+
     stages {
         // ETAPA 1: validar la rama y descargar el repositorio con Git.
-        // URL e identificador de credencial provienen del servidor Jenkins.
+        // Reutiliza el ID de credencial ya existente en Jenkins (no es el token).
         stage('1 - Integracion con GitHub') {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
@@ -33,9 +39,6 @@ pipeline {
                         def rama = params.BRANCH_A_CONSTRUIR?.trim()
                         if (!(rama ==~ /^(main|feature\/[A-Za-z0-9._-]+|hotfix\/[A-Za-z0-9._-]+|docs\/[A-Za-z0-9._-]+)$/)) {
                             error('Rama invalida. Usar main, feature/*, hotfix/* o docs/*.')
-                        }
-                        if (!env.CI_REPO_URL?.trim()) {
-                            error('Configurar CI_REPO_URL en Jenkins antes de ejecutar.')
                         }
                         env.CI_RAMA = rama
                         env.CI_PREPARADA = 'false'
@@ -45,16 +48,9 @@ pipeline {
                         echo "Rama: ${env.CI_RAMA} | Ejecucion: ${politica}"
                     }
                     deleteDir()
-                    script {
-                        if (env.CI_GITHUB_CREDENTIAL_ID?.trim()) {
-                            git branch: env.CI_RAMA,
-                                credentialsId: env.CI_GITHUB_CREDENTIAL_ID,
-                                url: env.CI_REPO_URL
-                        } else {
-                            // El checkout publico puede ejecutarse sin token.
-                            git branch: env.CI_RAMA, url: env.CI_REPO_URL
-                        }
-                    }
+                    git branch: env.CI_RAMA,
+                        credentialsId: 'github-private',
+                        url: env.GIT_URL
                     bat 'git rev-parse --short HEAD'
                 }
             }
@@ -199,18 +195,13 @@ pipeline {
 }
 
 // Los tokens NO se guardan en el repositorio.
-// Jenkins Credentials guarda los Secret Text; las variables contienen sus IDs.
+// Reutiliza los IDs de Secret Text de la tarea 1; Jenkins resuelve sus valores.
 def notificarTelegram(String estado) {
-    def tokenId = env.CI_TELEGRAM_TOKEN_CREDENTIAL_ID?.trim()
-    def chatId = env.CI_TELEGRAM_CHAT_CREDENTIAL_ID?.trim()
-    if (!tokenId || !chatId) {
-        error('Configurar CI_TELEGRAM_TOKEN_CREDENTIAL_ID y CI_TELEGRAM_CHAT_CREDENTIAL_ID en Jenkins.')
-    }
     def mensaje = "Jenkins UDLA: ${estado} | Rama: ${env.CI_RAMA ?: params.BRANCH_A_CONSTRUIR} | Job: ${env.JOB_NAME} | Build #${env.BUILD_NUMBER} | ${env.BUILD_URL}"
     withEnv(["TELEGRAM_MESSAGE=${mensaje}"]) {
         withCredentials([
-            string(credentialsId: tokenId, variable: 'BOT_TOKEN'),
-            string(credentialsId: chatId, variable: 'CHAT_ID')
+            string(credentialsId: 'telegram-bot-token', variable: 'BOT_TOKEN'),
+            string(credentialsId: 'telegram-chat-id', variable: 'CHAT_ID')
         ]) {
             powershell '''
 $ErrorActionPreference = 'Stop'
