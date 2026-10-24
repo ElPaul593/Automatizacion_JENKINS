@@ -1,20 +1,4 @@
-/*
- * TAREA 2 - HelpDesk UDLA | Pipeline CI optimizado
- * Proyecto: gestion de incidencias de soporte tecnico con Java y Maven.
- * Pruebas automaticas: 13 JUnit (11 unitarias y 2 de integracion HTTP).
- *
- * ETAPAS DE LA EXPOSICION:
- * 1. Integracion GitHub
- * 2. Preparar caches y archivos
- * 3. Verificaciones paralelas y selectivas
- * 4. Publicar resultados
- *
- * CUATRO ESTRATEGIAS: paralelismo, cache, seleccion por rama y modularidad.
- * post envia notificaciones al final: NO es una etapa de despliegue.
- *
- * Jenkins debe configurar CI_REPO_URL y, si es privado,
- * CI_GITHUB_CREDENTIAL_ID. No colocar claves ni tokens en este archivo.
- */
+
 pipeline {
     // Requiere un agente Windows (bat y PowerShell).
     agent any
