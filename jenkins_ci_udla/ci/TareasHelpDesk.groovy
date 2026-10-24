@@ -21,9 +21,4 @@ def analizarCalidad(String cacheLocal) {
     ejecutarMaven(cacheLocal, true)
 }
 
-def comprobarDocumentacion() {
-    bat 'if not exist "jenkins_ci_udla\\README.md" exit /b 1'
-    echo 'Validacion de README completada.'
-}
-
 return this
