@@ -40,7 +40,8 @@ pipeline {
                         env.CI_RAMA = rama
                         env.CI_PREPARADA = 'false'
                         def politica = rama.startsWith('docs/') ? 'Solo README' :
-                            rama.startsWith('hotfix/') ? 'JUnit' : 'JUnit y calidad'
+                            rama.startsWith('hotfix/') || rama == 'main' ? 'JUnit' :
+                            'JUnit y calidad'
                         echo "Rama: ${env.CI_RAMA} | Ejecucion: ${politica}"
                     }
                     deleteDir()
@@ -97,8 +98,14 @@ pipeline {
                             unstash 'codigo-helpdesk'
                             catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                                 script {
-                                    def tareas = load 'jenkins_ci_udla/ci/TareasHelpDesk.groovy'
-                                    tareas.compilarYProbar(env.MAVEN_CACHE_JUNIT)
+                                    if (env.CI_RAMA == 'main') {
+                                        // Compatibilidad con la tarea 1: main no tiene modulo Groovy.
+                                        // Ejecuta solo Maven/JUnit sin modificar main.
+                                        bat 'mvn -B -ntp "-Dmaven.repo.local=%MAVEN_CACHE_JUNIT%" -f jenkins_ci_udla/pom.xml clean verify'
+                                    } else {
+                                        def tareas = load 'jenkins_ci_udla/ci/TareasHelpDesk.groovy'
+                                        tareas.compilarYProbar(env.MAVEN_CACHE_JUNIT)
+                                    }
                                 }
                             }
                         }
@@ -106,11 +113,12 @@ pipeline {
                 }
 
                 // 3B - Analisis estatico con Checkstyle y PMD.
+                // Solo feature/* dispone del perfil calidad; main es la tarea 1.
                 // Su cache es independiente para evitar colisiones con JUnit.
                 stage('3B - Checkstyle y PMD') {
                     when {
                         expression {
-                            env.CI_RAMA == 'main' || env.CI_RAMA.startsWith('feature/')
+                            env.CI_RAMA.startsWith('feature/')
                         }
                     }
                     steps {
@@ -161,7 +169,7 @@ pipeline {
                             archiveArtifacts allowEmptyArchive: true,
                                 artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
                         }
-                        if (env.CI_RAMA == 'main' || env.CI_RAMA.startsWith('feature/')) {
+                        if (env.CI_RAMA.startsWith('feature/')) {
                             archiveArtifacts allowEmptyArchive: true,
                                 artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
                         }
@@ -182,6 +190,10 @@ pipeline {
         }
         failure {
             script { notificarTelegram('FALLIDA') }
+        }
+        // JUnit puede marcar builds inestables aun cuando ninguna etapa falle.
+        unstable {
+            script { notificarTelegram('INESTABLE') }
         }
     }
 }
