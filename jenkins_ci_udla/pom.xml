@@ -60,7 +60,6 @@
                         <version>3.6.0</version>
                         <configuration>
                             <configLocation>${project.basedir}/config/checkstyle.xml</configLocation>
-                            <encoding>UTF-8</encoding>
                             <includeTestSourceDirectory>true</includeTestSourceDirectory>
                             <linkXRef>false</linkXRef>
                         </configuration>
