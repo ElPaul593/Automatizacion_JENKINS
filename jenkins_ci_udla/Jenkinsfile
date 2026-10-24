@@ -14,7 +14,7 @@ pipeline {
         string(
             name: 'BRANCH_A_CONSTRUIR',
             defaultValue: 'feature/pipeline-optimizacion',
-            description: 'Rama: main, feature/*, hotfix/* o docs/*'
+            description: 'Solo main o feature/pipeline-optimizacion'
         )
     }
 
@@ -37,14 +37,12 @@ pipeline {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     script {
                         def rama = params.BRANCH_A_CONSTRUIR?.trim()
-                        if (!(rama ==~ /^(main|feature\/[A-Za-z0-9._-]+|hotfix\/[A-Za-z0-9._-]+|docs\/[A-Za-z0-9._-]+)$/)) {
-                            error('Rama invalida. Usar main, feature/*, hotfix/* o docs/*.')
+                        if (!(rama in ['main', 'feature/pipeline-optimizacion'])) {
+                            error('Rama no admitida. Seleccionar main o feature/pipeline-optimizacion.')
                         }
                         env.CI_RAMA = rama
                         env.CI_PREPARADA = 'false'
-                        def politica = rama.startsWith('docs/') ? 'Solo README' :
-                            rama.startsWith('hotfix/') || rama == 'main' ? 'JUnit' :
-                            'JUnit y calidad'
+                        def politica = rama == 'main' ? 'Solo JUnit' : 'JUnit, Checkstyle y PMD'
                         echo "Rama: ${env.CI_RAMA} | Ejecucion: ${politica}"
                     }
                     deleteDir()
@@ -86,9 +84,6 @@ pipeline {
             parallel {
                 // 3A - Compila, ejecuta 13 tests JUnit y produce el JAR.
                 stage('3A - Compilacion y JUnit') {
-                    when {
-                        expression { !env.CI_RAMA.startsWith('docs/') }
-                    }
                     steps {
                         dir('ci-build') {
                             unstash 'codigo-helpdesk'
@@ -109,12 +104,12 @@ pipeline {
                 }
 
                 // 3B - Analisis estatico con Checkstyle y PMD.
-                // Solo feature/* dispone del perfil calidad; main es la tarea 1.
+                // La rama feature incorpora el perfil calidad; main conserva la tarea 1.
                 // Su cache es independiente para evitar colisiones con JUnit.
                 stage('3B - Checkstyle y PMD') {
                     when {
                         expression {
-                            env.CI_RAMA.startsWith('feature/')
+                            env.CI_RAMA == 'feature/pipeline-optimizacion'
                         }
                     }
                     steps {
@@ -124,24 +119,6 @@ pipeline {
                                 script {
                                     def tareas = load 'jenkins_ci_udla/ci/TareasHelpDesk.groovy'
                                     tareas.analizarCalidad(env.MAVEN_CACHE_CALIDAD)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 3C - Solo en docs/*: verificar que exista el README.
-                stage('3C - Revisar documentacion') {
-                    when {
-                        expression { env.CI_RAMA.startsWith('docs/') }
-                    }
-                    steps {
-                        dir('ci-docs') {
-                            unstash 'codigo-helpdesk'
-                            catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                                script {
-                                    def tareas = load 'jenkins_ci_udla/ci/TareasHelpDesk.groovy'
-                                    tareas.comprobarDocumentacion()
                                 }
                             }
                         }
@@ -159,13 +136,11 @@ pipeline {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     script {
-                        if (!env.CI_RAMA.startsWith('docs/')) {
-                            junit allowEmptyResults: true,
-                                testResults: 'ci-build/jenkins_ci_udla/target/surefire-reports/*.xml'
-                            archiveArtifacts allowEmptyArchive: true,
-                                artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
-                        }
-                        if (env.CI_RAMA.startsWith('feature/')) {
+                        junit allowEmptyResults: true,
+                            testResults: 'ci-build/jenkins_ci_udla/target/surefire-reports/*.xml'
+                        archiveArtifacts allowEmptyArchive: true,
+                            artifacts: 'ci-build/jenkins_ci_udla/target/*.jar'
+                        if (env.CI_RAMA == 'feature/pipeline-optimizacion') {
                             archiveArtifacts allowEmptyArchive: true,
                                 artifacts: 'ci-quality/jenkins_ci_udla/target/reports/*.html,ci-quality/jenkins_ci_udla/target/checkstyle-result.xml,ci-quality/jenkins_ci_udla/target/pmd.xml'
                         }
