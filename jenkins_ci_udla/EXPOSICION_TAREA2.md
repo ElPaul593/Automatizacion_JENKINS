@@ -14,7 +14,7 @@ La primera tarea ya integraba GitHub, Maven, 13 tests JUnit y Telegram. La segun
 |---|---|---|
 | 1. Integracion con GitHub | Valida rama, descarga el codigo y muestra commit | Git, checkout, credenciales Jenkins |
 | 2. Preparar cache y archivos | Define 2 repositorios Maven persistentes y realiza `stash` | Cache, stash |
-| 3. Validaciones paralelas y selectivas | JUnit, Checkstyle/PMD, o README dependiendo de rama | Parallel, when, unstash, load |
+| 3. Validaciones paralelas y selectivas | JUnit en ambas ramas; Checkstyle/PMD solamente en feature | Parallel, when, unstash, load |
 | 4. Publicar resultados | Publica reportes JUnit, informes de calidad y JAR | junit, archiveArtifacts |
 
 El bloque **`post` no es una quinta etapa**: informa por Telegram un resultado EXITOSA/FALLIDA y registra el estado del pipeline.
@@ -42,7 +42,7 @@ El bloque **`post` no es una quinta etapa**: informa por Telegram un resultado E
 
 ### Paul - Seleccion, modularidad, etapa 4 y Telegram
 
-- Explicar `when` y la politica por ramas: `main` (JUnit de la tarea 1), `feature/*` (JUnit + calidad), `hotfix/*` (JUnit), `docs/*` (README). `main` ahora tiene compatibilidad mediante Maven directo sin necesidad de agregar el modulo de la tarea 2 a esa rama.
+- Explicar `when` y la politica por ramas: `main` (JUnit de la tarea 1), `feature/pipeline-optimizacion` (JUnit + calidad). `main` ahora tiene compatibilidad mediante Maven directo sin necesidad de agregar el modulo de la tarea 2 a esa rama.
 - Estrategia que explica: **ejecucion selectiva** y **modularidad** mediante el archivo `ci/TareasHelpDesk.groovy`.
 - Mostrar etapa **4** para publicar reportes y JAR.
 - Explicar `post { always, success, failure }` y Telegram: credenciales se guardan en Jenkins, nunca en el repositorio.
@@ -70,12 +70,12 @@ Tambien deben existir un agente Windows con PowerShell/Git y una instalacion Mav
 - Ejecutar el pipeline dos veces, registrar tiempos y observar la reutilizacion de las caches Maven.
 - Confirmar reportes JUnit (13 tests), archivos JAR e informes Checkstyle/PMD.
 - Confirmar los mensajes de Telegram en escenarios de exito y fallo controlado.
-- Preparar ramas `docs/*` y `hotfix/*` desde una base compatible y demostrar que `when` omite etapas.
+- Demostrar la ejecucion selectiva comparando las dos ramas reales: `main` (solo JUnit) y `feature/pipeline-optimizacion` (JUnit + calidad).
 - La compatibilidad de `main` con el Jenkinsfile de la tarea 2 ya esta implementada. En `main` solo se ejecuta JUnit (no tiene el perfil de calidad de la tarea 2).
 
 **Aviso:** No se utiliza SonarQube. Checkstyle y PMD estan configurados para generar reportes. Todavia no actuan como puerta de calidad que haga fallar el build al detectar una infraccion.
 
-**Estado:** el Jenkinsfile esta organizado, pero el comportamiento completo de la tarea 2 aun no ha sido validado en el servidor Jenkins.
+**Estado actualizado:** el usuario informo de un build #2 SUCCESS del nuevo job, una notificacion Telegram recibida y un log con ejecucion paralela 3A/3B. Todavia faltan capturas consolidadas de resultados y mediciones comparables de tiempos.
 
 ## Ramas existentes y terminologia
 
@@ -85,8 +85,8 @@ Al revisar GitHub, solo existen `main` y `feature/pipeline-optimizacion`. No hay
 
 El Jenkinsfile ya incluye `timestamps()`. **No afirmar un ahorro porcentual sin datos.**
 
-1. El administrador instala o confirma el plugin **Pipeline Graph View**, abre el build y selecciona **Pipeline Overview** para observar las cuatro etapas y las ramas paralelas.
-2. Si dispone de **Pipeline Stage View**, consultar la duracion por etapa y sus promedios historicos; esta vista puede no representar visualmente las ramas paralelas.
+1. Abrir el build y usar **Pipeline Overview** o **Stage View** solo si esa vista YA existe en Jenkins. **No hace falta instalar plugins nuevos**: tambien se pueden consultar las etapas y sus marcas de tiempo desde **Console Output**.
+2. El **Console Output** muestra cada paso tecnico `[Pipeline]` dentro de una etapa; esto es normal, no significa que se hayan creado etapas adicionales. Usar `Ctrl+F` con `1 -`, `2 -`, `3 -`, `4 -` para encontrarlas. Si existe Stage View, usarla para sus duraciones.
 3. Ejecutar dos builds exitosos de `feature/pipeline-optimizacion` sobre el mismo agente Windows para comparar una cache fria y otra caliente. Registrar el tiempo **total** y de las etapas **1, 2, 3 y 4**.
 4. Dentro de la etapa 3 registrar por separado **3A (JUnit)** y **3B (Checkstyle/PMD)**. Si ambos se solapan, hay paralelismo.
 5. No comparar los tiempos de la tarea 1 (sin analisis de calidad) y la tarea 2 como si hicieran el mismo trabajo.
@@ -126,5 +126,5 @@ El `load` permite reutilizar codigo de otro archivo del workspace, no crea autom
 
 ## Exigencias aun pendientes
 
-La existencia del codigo no demuestra que funcione en el servidor. Faltan la validacion real de las cuatro etapas, las notificaciones, las mediciones de tiempo, las ramas `docs/*`/`hotfix/*` de demostracion y las capturas para el informe. Comprobar que Jenkins mantenga las credenciales ya utilizadas por la tarea 1 y que el job de la tarea 2 lea la rama correcta.
+Ya existe una ejecucion reportada como SUCCESS y Telegram entrego el mensaje. Restan: evidencias de reportes JUnit/Checkstyle/PMD y JAR archivados, comparacion de tiempos de dos builds, y demostrar la seleccion main/feature. No se requieren ramas extras ni plugins nuevos.
 
