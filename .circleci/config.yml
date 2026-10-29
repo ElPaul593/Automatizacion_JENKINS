@@ -1,0 +1,124 @@
+# Tarea 3 - HelpDesk UDLA: migracion Jenkins -> CircleCI
+# Archivo de ejecucion: .circleci/config.yml
+# No se requieren Jenkins, SonarQube, orbs ni credenciales dentro del repositorio.
+version: 2.1
+
+# Ejecucion selectiva: true = JUnit + Checkstyle/PMD, false = solo JUnit.
+# Se elige al ejecutar manualmente el pipeline en CircleCI.
+parameters:
+  analisis_completo:
+    type: boolean
+    default: true
+
+executors:
+  java17:
+    docker:
+      - image: cimg/openjdk:17.0
+    working_directory: ~/proyecto
+
+# Modularidad: comandos reutilizados por diferentes jobs.
+commands:
+  restaurar_cache_maven:
+    parameters:
+      tipo:
+        type: string
+    steps:
+      - restore_cache:
+          keys:
+            - v1-maven-<< parameters.tipo >>-{{ checksum "jenkins_ci_udla/pom.xml" }}
+
+  guardar_cache_maven:
+    parameters:
+      tipo:
+        type: string
+    steps:
+      - save_cache:
+          key: v1-maven-<< parameters.tipo >>-{{ checksum "jenkins_ci_udla/pom.xml" }}
+          paths:
+            - ~/.m2/repository
+
+  notificar_fallo:
+    steps:
+      - run:
+          name: Telegram - avisar fallo de este job
+          when: on_fail
+          command: bash .circleci/scripts/telegram.sh FALLIDA
+
+jobs:
+  # JOB 1: compila Java 17, ejecuta 13 JUnit y crea el JAR.
+  pruebas_junit:
+    executor: java17
+    steps:
+      - checkout
+      - restaurar_cache_maven:
+          tipo: junit
+      - run:
+          name: Compilar y ejecutar pruebas JUnit
+          command: mvn -B -ntp -f jenkins_ci_udla/pom.xml clean verify
+      - guardar_cache_maven:
+          tipo: junit
+      - store_test_results:
+          path: jenkins_ci_udla/target/surefire-reports
+      - store_artifacts:
+          path: jenkins_ci_udla/target/gestion-incidencias-1.0.0.jar
+          destination: ejecutable
+      - store_artifacts:
+          path: jenkins_ci_udla/target/surefire-reports
+          destination: informes-junit
+      - notificar_fallo
+
+  # JOB 2: inspecciona el mismo codigo con Checkstyle y PMD, sin repetir JUnit.
+  # Es independiente de pruebas_junit; ambos jobs corren en paralelo.
+  calidad_codigo:
+    executor: java17
+    steps:
+      - checkout
+      - restaurar_cache_maven:
+          tipo: calidad
+      - run:
+          name: Ejecutar Checkstyle y PMD
+          command: mvn -B -ntp -Pcalidad -DskipTests -f jenkins_ci_udla/pom.xml clean verify
+      - guardar_cache_maven:
+          tipo: calidad
+      - store_artifacts:
+          path: jenkins_ci_udla/target/reports
+          destination: calidad-html
+      - store_artifacts:
+          path: jenkins_ci_udla/target/checkstyle-result.xml
+          destination: checkstyle
+      - store_artifacts:
+          path: jenkins_ci_udla/target/pmd.xml
+          destination: pmd
+      - notificar_fallo
+
+  # JOB 3: notificacion unica de exito al finalizar todos los jobs requeridos.
+  notificar_exito:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - checkout
+      - run:
+          name: Telegram - notificar pipeline exitoso
+          command: bash .circleci/scripts/telegram.sh EXITOSA
+
+# Workflows: dependencias con requires y paralelismo entre jobs independientes.
+workflows:
+  # Configuracion completa equivalente a Jenkins optimizado.
+  validacion_completa:
+    when: << pipeline.parameters.analisis_completo >>
+    jobs:
+      - pruebas_junit
+      - calidad_codigo
+      - notificar_exito:
+          requires:
+            - pruebas_junit
+            - calidad_codigo
+
+  # Variante selectiva: omite Checkstyle/PMD sin alterar el codigo fuente.
+  validacion_rapida:
+    unless: << pipeline.parameters.analisis_completo >>
+    jobs:
+      - pruebas_junit
+      - notificar_exito:
+          requires:
+            - pruebas_junit
