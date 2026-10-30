@@ -89,13 +89,6 @@ jobs:
       - store_artifacts:
           path: jenkins_ci_udla/target/pmd.xml
           destination: pmd
-      # DEMOSTRACION TEMPORAL: falla controlada para comprobar Telegram.
-      # Revertir este commit despues de obtener la evidencia.
-      - run:
-          name: Demostracion - fallo controlado de calidad_codigo
-          command: |
-            echo "FALLO CONTROLADO: prueba de notificacion FALLIDA en CircleCI."
-            exit 1
       - notificar_fallo
 
   # JOB 3: notificacion unica de exito al finalizar todos los jobs requeridos.
